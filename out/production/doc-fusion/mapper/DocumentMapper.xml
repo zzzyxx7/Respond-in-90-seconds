@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.fusion.docfusion.mapper.DocumentMapper">
+
+    <resultMap id="DocumentResultMap" type="com.fusion.docfusion.entity.Document">
+        <id property="id" column="id"/>
+        <result property="documentSetId" column="document_set_id"/>
+        <result property="fileName" column="file_name"/>
+        <result property="fileType" column="file_type"/>
+        <result property="filePath" column="file_path"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.fusion.docfusion.entity.Document"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO document (document_set_id, file_name, file_type, file_path, file_size, created_at)
+        VALUES (#{documentSetId}, #{fileName}, #{fileType}, #{filePath}, #{fileSize}, #{createdAt})
+    </insert>
+
+    <select id="selectByDocumentSetId" resultMap="DocumentResultMap">
+        SELECT * FROM document WHERE document_set_id = #{documentSetId}
+    </select>
+
+    <select id="selectById" resultMap="DocumentResultMap">
+        SELECT * FROM document WHERE id = #{id}
+    </select>
+</mapper>

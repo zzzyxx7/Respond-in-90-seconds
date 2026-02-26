@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.fusion.docfusion.mapper.TemplateFieldMapper">
+
+    <resultMap id="TemplateFieldResultMap" type="com.fusion.docfusion.entity.TemplateField">
+        <id property="id" column="id"/>
+        <result property="templateId" column="template_id"/>
+        <result property="fieldSchemaId" column="field_schema_id"/>
+        <result property="location" column="location"/>
+        <result property="format" column="format"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.fusion.docfusion.entity.TemplateField"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO template_field (template_id, field_schema_id, location, format, created_at)
+        VALUES (#{templateId}, #{fieldSchemaId}, #{location}, #{format}, #{createdAt})
+    </insert>
+
+    <insert id="insertBatch">
+        INSERT INTO template_field (template_id, field_schema_id, location, format, created_at)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.templateId}, #{item.fieldSchemaId}, #{item.location},
+             #{item.format}, #{item.createdAt})
+        </foreach>
+    </insert>
+
+    <select id="selectByTemplateId" resultMap="TemplateFieldResultMap">
+        SELECT * FROM template_field WHERE template_id = #{templateId} ORDER BY id ASC
+    </select>
+
+    <delete id="deleteByTemplateId">
+        DELETE FROM template_field WHERE template_id = #{templateId}
+    </delete>
+
+</mapper>
+

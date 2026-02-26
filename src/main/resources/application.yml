@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: doc-fusion
+  datasource:
+    url: jdbc:mysql://localhost:3306/mydatabase?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: myuser
+    password: secret
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 100MB
+  docker:
+    compose:
+      enabled: false
+
+# 本地文件存储路径（相对项目根或绝对路径）
+app:
+  upload:
+    base-dir: ${user.dir}/uploads
+    docs-dir: ${app.upload.base-dir}/docs
+    templates-dir: ${app.upload.base-dir}/templates
+    results-dir: ${app.upload.base-dir}/results
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.fusion.docfusion.entity
+  configuration:
+    map-underscore-to-camel-case: true
+
+ai:
+  base-url: http://localhost:8000

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.fusion.docfusion.mapper.FieldSchemaMapper">
+
+    <resultMap id="FieldSchemaResultMap" type="com.fusion.docfusion.entity.FieldSchema">
+        <id property="id" column="id"/>
+        <result property="code" column="code"/>
+        <result property="displayName" column="display_name"/>
+        <result property="dataType" column="data_type"/>
+        <result property="description" column="description"/>
+        <result property="enabled" column="enabled"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.fusion.docfusion.entity.FieldSchema"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO field_schema (code, display_name, data_type, description, enabled, created_at)
+        VALUES (#{code}, #{displayName}, #{dataType}, #{description}, #{enabled}, #{createdAt})
+    </insert>
+
+    <select id="selectById" resultMap="FieldSchemaResultMap">
+        SELECT * FROM field_schema WHERE id = #{id}
+    </select>
+
+    <select id="selectByCode" resultMap="FieldSchemaResultMap">
+        SELECT * FROM field_schema WHERE code = #{code}
+    </select>
+
+    <select id="selectAll" resultMap="FieldSchemaResultMap">
+        SELECT * FROM field_schema ORDER BY id ASC
+    </select>
+
+</mapper>
+
