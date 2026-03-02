@@ -1,11 +1,16 @@
 spring:
   application:
     name: doc-fusion
+
+  profiles:
+    active: dev
+
   datasource:
-    url: jdbc:mysql://localhost:3306/mydatabase?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-    username: myuser
-    password: secret
     driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${doc.datasource.host}:${doc.datasource.port}/${doc.datasource.database}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${doc.datasource.username}
+    password: ${doc.datasource.password}
+
   servlet:
     multipart:
       enabled: true
@@ -28,3 +33,10 @@ mybatis:
   type-aliases-package: com.fusion.docfusion.entity
   configuration:
     map-underscore-to-camel-case: true
+
+ai:
+  base-url: http://localhost:8000
+
+logging:
+  level:
+    com.fusion.docfusion: info

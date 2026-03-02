@@ -51,7 +51,8 @@ public class AiExtractServiceImpl implements AiExtractService {
                     new HttpEntity<>(body, headers);
 
             String url = aiBaseUrl + "/analyze";
-            log.info("调用 AI 抽取服务, url={}, file={}, instruction={}", url, file.getName(), instruction);
+            log.info("调用 AI 抽取服务, url={}, file={}, instructionLen={}",
+                    url, file.getName(), instruction == null ? 0 : instruction.length());
 
             ResponseEntity<String> response = restTemplate.postForEntity(url, requestEntity, String.class);
 
@@ -82,7 +83,7 @@ public class AiExtractServiceImpl implements AiExtractService {
                 result.put(field, value);
             }
         } else {
-            log.warn("AI 返回中未找到 payload.data 字段，原始返回：{}", json);
+            log.warn("AI 返回中未找到 payload.data 字段（已省略原始返回，len={}）", json == null ? 0 : json.length());
         }
         return result;
     }

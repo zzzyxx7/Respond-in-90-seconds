@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.fusion.docfusion.mapper.ExtractedValueMapper">
+
+    <resultMap id="ExtractedValueResultMap" type="com.fusion.docfusion.entity.ExtractedValue">
+        <id property="id" column="id"/>
+        <result property="documentId" column="document_id"/>
+        <result property="fieldSchemaId" column="field_schema_id"/>
+        <result property="fieldValue" column="field_value"/>
+        <result property="confidence" column="confidence"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.fusion.docfusion.entity.ExtractedValue"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO extracted_value (document_id, field_schema_id, field_value, confidence, created_at)
+        VALUES (#{documentId}, #{fieldSchemaId}, #{fieldValue}, #{confidence}, #{createdAt})
+    </insert>
+
+    <insert id="insertBatch">
+        INSERT INTO extracted_value (document_id, field_schema_id, field_value, confidence, created_at)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.documentId}, #{item.fieldSchemaId}, #{item.fieldValue},
+             #{item.confidence}, #{item.createdAt})
+        </foreach>
+    </insert>
+
+    <select id="selectByDocumentId" resultMap="ExtractedValueResultMap">
+        SELECT * FROM extracted_value WHERE document_id = #{documentId}
+    </select>
+
+</mapper>
+

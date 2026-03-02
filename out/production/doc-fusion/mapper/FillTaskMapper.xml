@@ -12,12 +12,13 @@
         <result property="resultFilePath" column="result_file_path"/>
         <result property="createdAt" column="created_at"/>
         <result property="finishedAt" column="finished_at"/>
+        <result property="errorMessage" column="error_message"/>
     </resultMap>
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.FillTask"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO fill_task (document_set_id, template_id, status, result_file_path, created_at, finished_at)
-        VALUES (#{documentSetId}, #{templateId}, #{status}, #{resultFilePath}, #{createdAt}, #{finishedAt})
+        INSERT INTO fill_task (document_set_id, template_id, status, result_file_path, created_at, finished_at, error_message)
+        VALUES (#{documentSetId}, #{templateId}, #{status}, #{resultFilePath}, #{createdAt}, #{finishedAt}, #{errorMessage})
     </insert>
 
     <update id="updateById" parameterType="com.fusion.docfusion.entity.FillTask">
@@ -26,6 +27,7 @@
             <if test="status != null">status = #{status},</if>
             <if test="resultFilePath != null">result_file_path = #{resultFilePath},</if>
             <if test="finishedAt != null">finished_at = #{finishedAt},</if>
+            <if test="errorMessage != null">error_message = #{errorMessage},</if>
         </set>
         WHERE id = #{id}
     </update>

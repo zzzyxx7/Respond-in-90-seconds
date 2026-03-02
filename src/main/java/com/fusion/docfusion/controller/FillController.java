@@ -7,6 +7,7 @@ import com.fusion.docfusion.dto.FillTaskVO;
 import com.fusion.docfusion.service.FillService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
@@ -23,6 +24,7 @@ import java.nio.file.Paths;
 @RestController
 @RequestMapping("/api/fill")
 @RequiredArgsConstructor
+@Slf4j
 public class FillController {
 
     private final FillService fillService;
@@ -34,6 +36,7 @@ public class FillController {
      */
     @PostMapping("/submit")
     public Result<FillTaskVO> submitFill(@RequestBody @Valid FillRequest request) {
+        log.info("提交填表任务, documentSetId={}, templateId={}", request.getDocumentSetId(), request.getTemplateId());
         return fillService.submitFill(request);
     }
 
@@ -43,6 +46,7 @@ public class FillController {
      */
     @GetMapping("/tasks/{taskId}")
     public Result<FillTaskVO> getTask(@PathVariable Long taskId) {
+        log.info("查询填表任务, taskId={}", taskId);
         return fillService.getTask(taskId);
     }
 
@@ -52,8 +56,11 @@ public class FillController {
      */
     @GetMapping("/download/{taskId}")
     public ResponseEntity<Resource> downloadResult(@PathVariable Long taskId) {
+        log.info("下载填表结果, taskId={}", taskId);
         FillTaskVO task = fillService.getTask(taskId).getData();
         if (task == null || !"SUCCESS".equals(task.getStatus()) || task.getResultFilePath() == null) {
+            log.warn("下载失败：任务未成功或无结果文件, taskId={}, status={}, resultFilePath={}",
+                    taskId, task == null ? null : task.getStatus(), task == null ? null : task.getResultFilePath());
             return ResponseEntity.notFound().build();
         }
         Path resultsDir = Paths.get(uploadProperties.getResultsDir());
@@ -61,6 +68,7 @@ public class FillController {
         try {
             Resource resource = new UrlResource(filePath.toUri());
             if (!resource.exists() || !resource.isReadable()) {
+                log.warn("下载失败：文件不存在或不可读, taskId={}, path={}", taskId, filePath);
                 return ResponseEntity.notFound().build();
             }
             String contentType = "application/octet-stream";
@@ -74,6 +82,7 @@ public class FillController {
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                     .body(resource);
         } catch (Exception e) {
+            log.error("下载失败：异常, taskId={}", taskId, e);
             return ResponseEntity.notFound().build();
         }
     }

@@ -88,7 +88,20 @@ CREATE TABLE IF NOT EXISTS fill_task (
 
 
 /******************************
- * 5. 字段定义表：field_schema
+ * 5. 报表类型表：report_type
+ * 描述“业务上的报表类别”，例如：合同收支汇总表、员工信息表等
+ ******************************/
+CREATE TABLE IF NOT EXISTS report_type (
+                                           id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '报表类型ID',
+                                           name VARCHAR(255) NOT NULL COMMENT '报表类型名称，例如 合同收支汇总表',
+                                           description VARCHAR(512) DEFAULT NULL COMMENT '报表类型说明，例如 适用于年度合同统计',
+                                           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    COMMENT='报表类型：描述业务上的报表类别，例如合同汇总表、员工信息表';
+
+
+/******************************
+ * 6. 字段定义表：field_schema
  * 描述“系统里可以抽取哪些字段”
  * 不绑定具体业务场景，只是一个字段字典
  ******************************/
@@ -105,7 +118,7 @@ CREATE TABLE IF NOT EXISTS field_schema (
 
 
 /******************************
- * 6. 模板字段表：template_field
+ * 7. 模板字段表：template_field
  * 描述“某个模板中，哪个位置要填哪个字段”
  * 关系：
  *   template(1)     ——> (N) template_field
@@ -133,7 +146,7 @@ CREATE TABLE IF NOT EXISTS template_field (
 
 
 /******************************
- * 7. 抽取结果表：extracted_value
+ * 8. 抽取结果表：extracted_value
  * 存“某个文档里抽取到的某个字段的值”
  * 关系：
  *   document(1)      ——> (N) extracted_value

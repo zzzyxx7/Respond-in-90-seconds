@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# local config (do not commit)
+application-dev.yml
