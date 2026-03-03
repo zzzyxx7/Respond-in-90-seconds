@@ -11,4 +11,6 @@ public interface TemplateMapper {
     int insert(Template entity);
     Template selectById(@Param("id") Long id);
     List<Template> selectAll();
+
+    List<Template> selectByReportTypeId(@Param("reportTypeId") Long reportTypeId);
 }

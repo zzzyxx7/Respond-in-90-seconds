@@ -40,3 +40,8 @@ ai:
 logging:
   level:
     com.fusion.docfusion: info
+jwt:
+  secret: "this-is-a-very-long-demo-jwt-secret-key-123456"
+  expiration-seconds: 3600
+
+

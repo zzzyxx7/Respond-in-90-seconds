@@ -11,8 +11,18 @@ import java.time.LocalDateTime;
 @Data
 public class FillTask {
     private Long id;
+    /** 创建任务的用户ID，可为空（未登录） */
+    private Long userId;
     private Long documentSetId;
     private Long templateId;
+    /**
+     * 任务模式：TEMPLATE（模板模式）/ FREE（自由模式）
+     */
+    private String mode;
+    /**
+     * 自由模式下的用户需求描述
+     */
+    private String userRequirement;
     /** PENDING, RUNNING, SUCCESS, FAILED */
     private String status;
     /** 填写结果文件路径 */

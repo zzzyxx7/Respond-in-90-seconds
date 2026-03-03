@@ -6,8 +6,11 @@
 
     <resultMap id="FillTaskResultMap" type="com.fusion.docfusion.entity.FillTask">
         <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
         <result property="documentSetId" column="document_set_id"/>
         <result property="templateId" column="template_id"/>
+        <result property="mode" column="mode"/>
+        <result property="userRequirement" column="user_requirement"/>
         <result property="status" column="status"/>
         <result property="resultFilePath" column="result_file_path"/>
         <result property="createdAt" column="created_at"/>
@@ -17,8 +20,10 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.FillTask"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO fill_task (document_set_id, template_id, status, result_file_path, created_at, finished_at, error_message)
-        VALUES (#{documentSetId}, #{templateId}, #{status}, #{resultFilePath}, #{createdAt}, #{finishedAt}, #{errorMessage})
+        INSERT INTO fill_task (document_set_id, template_id, mode, user_requirement, status, result_file_path,
+                               created_at, finished_at, error_message)
+        VALUES (#{documentSetId}, #{templateId}, #{mode}, #{userRequirement}, #{status}, #{resultFilePath},
+                #{createdAt}, #{finishedAt}, #{errorMessage})
     </insert>
 
     <update id="updateById" parameterType="com.fusion.docfusion.entity.FillTask">
@@ -33,6 +38,28 @@
     </update>
 
     <select id="selectById" resultMap="FillTaskResultMap">
-        SELECT * FROM fill_task WHERE id = #{id}
+        SELECT *
+        FROM fill_task
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByConditions" resultMap="FillTaskResultMap">
+        SELECT *
+        FROM fill_task
+        <where>
+            <if test="mode != null and mode != ''">
+                AND mode = #{mode}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+        ORDER BY created_at DESC
+        <if test="limit != null and limit &gt; 0">
+            LIMIT #{limit}
+        </if>
+        <if test="offset != null and offset &gt;= 0">
+            OFFSET #{offset}
+        </if>
     </select>
 </mapper>

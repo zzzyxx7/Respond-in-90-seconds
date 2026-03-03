@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 @Data
 public class Template {
     private Long id;
+    /** 所属报表类型ID，可为空表示未分类 */
+    private Long reportTypeId;
     private String fileName;
     /** word / excel */
     private String fileType;

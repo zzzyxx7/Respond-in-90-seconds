@@ -6,6 +6,7 @@
 
     <resultMap id="TemplateResultMap" type="com.fusion.docfusion.entity.Template">
         <id property="id" column="id"/>
+        <result property="reportTypeId" column="report_type_id"/>
         <result property="fileName" column="file_name"/>
         <result property="fileType" column="file_type"/>
         <result property="filePath" column="file_path"/>
@@ -14,8 +15,8 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.Template"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO template (file_name, file_type, file_path, created_at)
-        VALUES (#{fileName}, #{fileType}, #{filePath}, #{createdAt})
+        INSERT INTO template (report_type_id, file_name, file_type, file_path, created_at)
+        VALUES (#{reportTypeId}, #{fileName}, #{fileType}, #{filePath}, #{createdAt})
     </insert>
 
     <select id="selectById" resultMap="TemplateResultMap">
@@ -24,5 +25,12 @@
 
     <select id="selectAll" resultMap="TemplateResultMap">
         SELECT * FROM template ORDER BY created_at DESC
+    </select>
+
+    <select id="selectByReportTypeId" resultMap="TemplateResultMap">
+        SELECT *
+        FROM template
+        WHERE report_type_id = #{reportTypeId}
+        ORDER BY created_at DESC
     </select>
 </mapper>

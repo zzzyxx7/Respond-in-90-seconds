@@ -58,31 +58,28 @@ public class TemplateServiceImpl implements TemplateService {
         }
         String fileType = ext.equals("doc") || ext.equals("docx") ? "word" : "excel";
         Template t = new Template();
+        t.setReportTypeId(null);
         t.setFileName(originalFilename);
         t.setFileType(fileType);
         t.setFilePath(savedName);
         t.setCreatedAt(LocalDateTime.now());
         templateMapper.insert(t);
 
-        TemplateVO vo = new TemplateVO();
-        vo.setId(t.getId());
-        vo.setFileName(t.getFileName());
-        vo.setFileType(t.getFileType());
-        vo.setCreatedAt(t.getCreatedAt());
+        TemplateVO vo = toVO(t);
         return Result.success(vo);
     }
 
     @Override
     public Result<List<TemplateVO>> listTemplates() {
         List<Template> list = templateMapper.selectAll();
-        List<TemplateVO> vos = list.stream().map(t -> {
-            TemplateVO vo = new TemplateVO();
-            vo.setId(t.getId());
-            vo.setFileName(t.getFileName());
-            vo.setFileType(t.getFileType());
-            vo.setCreatedAt(t.getCreatedAt());
-            return vo;
-        }).toList();
+        List<TemplateVO> vos = list.stream().map(this::toVO).toList();
+        return Result.success(vos);
+    }
+
+    @Override
+    public Result<List<TemplateVO>> listByReportType(Long reportTypeId) {
+        List<Template> list = templateMapper.selectByReportTypeId(reportTypeId);
+        List<TemplateVO> vos = list.stream().map(this::toVO).toList();
         return Result.success(vos);
     }
 
@@ -92,12 +89,18 @@ public class TemplateServiceImpl implements TemplateService {
         if (t == null) {
             throw new BusinessException("模板不存在");
         }
+        TemplateVO vo = toVO(t);
+        return Result.success(vo);
+    }
+
+    private TemplateVO toVO(Template t) {
         TemplateVO vo = new TemplateVO();
         vo.setId(t.getId());
+        vo.setReportTypeId(t.getReportTypeId());
         vo.setFileName(t.getFileName());
         vo.setFileType(t.getFileType());
         vo.setCreatedAt(t.getCreatedAt());
-        return Result.success(vo);
+        return vo;
     }
 
     private static String getExtension(String filename) {
