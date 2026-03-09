@@ -93,6 +93,33 @@ public class TemplateServiceImpl implements TemplateService {
         return Result.success(vo);
     }
 
+    @Override
+    public Result<TemplateVO> updateTemplate(Long templateId, TemplateVO vo) {
+        Template t = templateMapper.selectById(templateId);
+        if (t == null) {
+            throw new BusinessException("模板不存在");
+        }
+        if (vo.getFileName() != null && !vo.getFileName().isBlank()) {
+            t.setFileName(vo.getFileName().trim());
+        }
+        // 允许前端切换报表类型（可为 null）
+        if (vo.getReportTypeId() != null || vo.getReportTypeId() == null) {
+            t.setReportTypeId(vo.getReportTypeId());
+        }
+        templateMapper.update(t);
+        return Result.success(toVO(t));
+    }
+
+    @Override
+    public Result<Boolean> deleteTemplate(Long templateId) {
+        Template t = templateMapper.selectById(templateId);
+        if (t == null) {
+            throw new BusinessException("模板不存在");
+        }
+        int rows = templateMapper.deleteById(templateId);
+        return Result.success(rows > 0);
+    }
+    //->VO
     private TemplateVO toVO(Template t) {
         TemplateVO vo = new TemplateVO();
         vo.setId(t.getId());
@@ -102,7 +129,7 @@ public class TemplateServiceImpl implements TemplateService {
         vo.setCreatedAt(t.getCreatedAt());
         return vo;
     }
-
+    //拿到文件后缀名
     private static String getExtension(String filename) {
         int i = filename.lastIndexOf('.');
         return i < 0 ? "" : filename.substring(i + 1);

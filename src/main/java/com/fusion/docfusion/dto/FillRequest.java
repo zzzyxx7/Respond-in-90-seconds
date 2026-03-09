@@ -11,4 +11,9 @@ public class FillRequest {
     /** 要填写的模板 ID */
     @NotNull(message = "模板ID不能为空")
     private Long templateId;
+    /**
+     * 用户的补充需求（可选），例如：
+     * "这次只汇总近三个月的合同"、"金额按万元展示"
+     */
+    private String userRequirement;
 }

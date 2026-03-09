@@ -44,4 +44,10 @@ jwt:
   secret: "this-is-a-very-long-demo-jwt-secret-key-123456"
   expiration-seconds: 3600
 
+rabbitmq:
+  host: ${doc.rabbitmq.host}
+  port: ${doc.rabbitmq.port}
+  username: ${doc.rabbitmq.username}
+  password: ${doc.rabbitmq.password}
+
 

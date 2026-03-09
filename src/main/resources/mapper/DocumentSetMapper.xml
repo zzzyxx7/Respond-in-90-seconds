@@ -19,4 +19,21 @@
     <select id="selectById" resultMap="DocumentSetResultMap">
         SELECT * FROM document_set WHERE id = #{id}
     </select>
+
+    <delete id="deleteById">
+        DELETE FROM document_set WHERE id = #{id}
+    </delete>
+
+    <resultMap id="DocumentSetListItemResultMap" type="com.fusion.docfusion.dto.DocumentSetListItemVO">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="documentCount" column="document_count"/>
+    </resultMap>
+    <select id="selectAllForList" resultMap="DocumentSetListItemResultMap">
+        SELECT ds.id, ds.name, ds.created_at,
+               (SELECT COUNT(*) FROM document d WHERE d.document_set_id = ds.id) AS document_count
+        FROM document_set ds
+        ORDER BY ds.created_at DESC
+    </select>
 </mapper>

@@ -2,6 +2,7 @@ package com.fusion.docfusion.service.impl;
 
 import com.fusion.docfusion.common.Result;
 import com.fusion.docfusion.config.UploadProperties;
+import com.fusion.docfusion.dto.DocumentSetListItemVO;
 import com.fusion.docfusion.dto.DocumentSetVO;
 import com.fusion.docfusion.dto.DocumentVO;
 import com.fusion.docfusion.entity.Document;
@@ -30,7 +31,7 @@ import java.util.UUID;
 @Slf4j
 public class DocumentServiceImpl implements DocumentService {
 
-    private static final List<String> ALLOWED_TYPES = List.of("docx", "md", "xlsx", "txt");
+    private static final List<String> ALLOWED_TYPES = List.of("docx", "md", "xlsx", "txt", "pdf");
 
     private final UploadProperties uploadProperties;
     private final DocumentSetMapper documentSetMapper;
@@ -95,6 +96,9 @@ public class DocumentServiceImpl implements DocumentService {
             vo.setCreatedAt(doc.getCreatedAt());
             docList.add(vo);
         }
+        if (docList.isEmpty()) {
+            throw new BusinessException("没有可保存的文档，请上传支持的类型（docx、md、xlsx、txt、pdf）");
+        }
 
         DocumentSetVO setVO = new DocumentSetVO();
         setVO.setId(documentSetId);
@@ -102,6 +106,23 @@ public class DocumentServiceImpl implements DocumentService {
         setVO.setCreatedAt(set.getCreatedAt());
         setVO.setDocuments(docList);
         return Result.success(setVO);
+    }
+
+    @Override
+    public Result<List<DocumentSetListItemVO>> listDocumentSets() {
+        List<DocumentSetListItemVO> list = documentSetMapper.selectAllForList();
+        return Result.success(list);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result<Boolean> deleteDocumentSet(Long documentSetId) {
+        DocumentSet set = documentSetMapper.selectById(documentSetId);
+        if (set == null) {
+            throw new BusinessException("文档集不存在");
+        }
+        int rows = documentSetMapper.deleteById(documentSetId);
+        return Result.success(rows > 0);
     }
 
     @Override

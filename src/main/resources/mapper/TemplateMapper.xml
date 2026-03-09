@@ -33,4 +33,18 @@
         WHERE report_type_id = #{reportTypeId}
         ORDER BY created_at DESC
     </select>
+
+    <update id="update" parameterType="com.fusion.docfusion.entity.Template">
+        UPDATE template
+        SET
+            report_type_id = #{reportTypeId},
+            file_name      = #{fileName}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE
+        FROM template
+        WHERE id = #{id}
+    </delete>
 </mapper>

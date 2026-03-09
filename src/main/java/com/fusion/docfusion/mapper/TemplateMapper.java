@@ -13,4 +13,8 @@ public interface TemplateMapper {
     List<Template> selectAll();
 
     List<Template> selectByReportTypeId(@Param("reportTypeId") Long reportTypeId);
+
+    int update(Template entity);
+
+    int deleteById(@Param("id") Long id);
 }

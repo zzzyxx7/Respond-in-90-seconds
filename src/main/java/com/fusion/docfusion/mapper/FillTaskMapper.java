@@ -12,7 +12,8 @@ public interface FillTaskMapper {
     int updateById(FillTask entity);
     FillTask selectById(@Param("id") Long id);
 
-    List<FillTask> selectByConditions(@Param("mode") String mode,
+    List<FillTask> selectByConditions(@Param("userId") Long userId,
+                                      @Param("mode") String mode,
                                       @Param("status") String status,
                                       @Param("limit") Integer limit,
                                       @Param("offset") Integer offset);

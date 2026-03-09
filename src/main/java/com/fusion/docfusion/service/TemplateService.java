@@ -18,4 +18,8 @@ public interface TemplateService {
     Result<List<TemplateVO>> listByReportType(Long reportTypeId);
 
     Result<TemplateVO> getById(Long templateId);
+
+    Result<TemplateVO> updateTemplate(Long templateId, TemplateVO vo);
+
+    Result<Boolean> deleteTemplate(Long templateId);
 }

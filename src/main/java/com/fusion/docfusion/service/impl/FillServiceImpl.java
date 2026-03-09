@@ -1,7 +1,7 @@
 package com.fusion.docfusion.service.impl;
 
 import com.fusion.docfusion.common.Result;
-import com.fusion.docfusion.config.UploadProperties;
+import com.fusion.docfusion.config.RabbitConfig;
 import com.fusion.docfusion.dto.FillRequest;
 import com.fusion.docfusion.dto.FillTaskVO;
 import com.fusion.docfusion.dto.FreeFillRequest;
@@ -17,15 +17,11 @@ import com.fusion.docfusion.mapper.TemplateMapper;
 import com.fusion.docfusion.service.FillService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * 填表任务：创建任务后执行填表逻辑。
@@ -36,11 +32,11 @@ import java.util.UUID;
 @Slf4j
 public class FillServiceImpl implements FillService {
 
-    private final UploadProperties uploadProperties;
     private final DocumentSetMapper documentSetMapper;
     private final DocumentMapper documentMapper;
     private final TemplateMapper templateMapper;
     private final FillTaskMapper fillTaskMapper;
+    private final AmqpTemplate amqpTemplate;
 
     @Override
     public Result<FillTaskVO> submitFill(FillRequest request) {
@@ -65,47 +61,15 @@ public class FillServiceImpl implements FillService {
         task.setDocumentSetId(documentSetId);
         task.setTemplateId(templateId);
         task.setMode("TEMPLATE");
-        task.setUserRequirement(null);
-        task.setStatus("RUNNING");
+        task.setUserRequirement(request.getUserRequirement());
+        task.setStatus("PENDING");
         task.setCreatedAt(LocalDateTime.now());
         fillTaskMapper.insert(task);
 
-        Path templatesDir = Paths.get(uploadProperties.getTemplatesDir());
-        Path resultsDir = Paths.get(uploadProperties.getResultsDir());
-        Path templatePath = templatesDir.resolve(template.getFilePath());
-        if (!Files.exists(templatePath)) {
-            task.setStatus("FAILED");
-            task.setFinishedAt(LocalDateTime.now());
-            fillTaskMapper.updateById(task);
-            throw new BusinessException("模板文件不存在: " + template.getFileName());
-        }
+        // 发送异步任务消息
+        amqpTemplate.convertAndSend(RabbitConfig.FILL_TASK_EXCHANGE, RabbitConfig.FILL_TASK_ROUTING_KEY, task.getId());
 
-        try {
-            Files.createDirectories(resultsDir);
-        } catch (IOException e) {
-            task.setStatus("FAILED");
-            task.setFinishedAt(LocalDateTime.now());
-            fillTaskMapper.updateById(task);
-            throw new BusinessException("创建结果目录失败: " + e.getMessage());
-        }
-        String resultFileName = "fill_" + task.getId() + "_" + UUID.randomUUID().toString().substring(0, 8) + "_" + template.getFileName();
-        Path resultPath = resultsDir.resolve(resultFileName);
-        try {
-            Files.copy(templatePath, resultPath);
-        } catch (IOException e) {
-            task.setStatus("FAILED");
-            task.setFinishedAt(LocalDateTime.now());
-            fillTaskMapper.updateById(task);
-            throw new BusinessException("生成结果文件失败: " + e.getMessage());
-        }
-
-        task.setStatus("SUCCESS");
-        task.setResultFilePath(resultFileName);
-        task.setFinishedAt(LocalDateTime.now());
-        fillTaskMapper.updateById(task);
-
-        FillTaskVO vo = toVO(task);
-        return Result.success(vo);
+        return Result.success(toVO(task));
     }
 
     @Override
@@ -136,60 +100,27 @@ public class FillServiceImpl implements FillService {
         task.setTemplateId(null);
         task.setMode("FREE");
         task.setUserRequirement(request.getUserRequirement());
-        task.setStatus("RUNNING");
+        task.setStatus("PENDING");
         task.setCreatedAt(LocalDateTime.now());
         fillTaskMapper.insert(task);
 
-        // 自由模式占位实现：生成一个简单的 Excel，列出文档文件名
-        Path resultsDir = Paths.get(uploadProperties.getResultsDir());
-        try {
-            Files.createDirectories(resultsDir);
-        } catch (IOException e) {
-            task.setStatus("FAILED");
-            task.setFinishedAt(LocalDateTime.now());
-            fillTaskMapper.updateById(task);
-            throw new BusinessException("创建结果目录失败: " + e.getMessage());
-        }
-
-        String resultFileName = "free_" + task.getId() + "_" + UUID.randomUUID().toString().substring(0, 8) + ".xlsx";
-        Path resultPath = resultsDir.resolve(resultFileName);
-
-        try (org.apache.poi.ss.usermodel.Workbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("汇总");
-            int rowIdx = 0;
-            // 表头
-            org.apache.poi.ss.usermodel.Row header = sheet.createRow(rowIdx++);
-            header.createCell(0).setCellValue("文件名");
-            // 数据行
-            for (Document doc : docs) {
-                org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowIdx++);
-                row.createCell(0).setCellValue(doc.getFileName());
-            }
-            try (java.io.OutputStream os = Files.newOutputStream(resultPath)) {
-                workbook.write(os);
-            }
-        } catch (IOException e) {
-            task.setStatus("FAILED");
-            task.setFinishedAt(LocalDateTime.now());
-            fillTaskMapper.updateById(task);
-            throw new BusinessException("生成自由模式结果文件失败: " + e.getMessage());
-        }
-
-        task.setStatus("SUCCESS");
-        task.setResultFilePath(resultFileName);
-        task.setFinishedAt(LocalDateTime.now());
-        fillTaskMapper.updateById(task);
+        // 发送异步任务消息
+        amqpTemplate.convertAndSend(RabbitConfig.FILL_TASK_EXCHANGE, RabbitConfig.FILL_TASK_ROUTING_KEY, task.getId());
 
         return Result.success(toVO(task));
     }
 
     @Override
     public Result<List<FillTaskVO>> listTasks(String mode, String status, Integer page, Integer size) {
+        Long currentUserId = currentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("请先登录查看历史任务");
+        }
         int pageNum = (page == null || page < 1) ? 1 : page;
         int pageSize = (size == null || size < 1 || size > 100) ? 20 : size;
         int offset = (pageNum - 1) * pageSize;
 
-        List<FillTask> tasks = fillTaskMapper.selectByConditions(mode, status, pageSize, offset);
+        List<FillTask> tasks = fillTaskMapper.selectByConditions(currentUserId, mode, status, pageSize, offset);
         List<FillTaskVO> vos = tasks.stream().map(FillServiceImpl::toVO).toList();
         return Result.success(vos);
     }

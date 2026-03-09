@@ -53,6 +53,27 @@ public class TemplateController {
     }
 
     /**
+     * 更新模板基本信息（目前支持：展示名、所属报表类型）
+     * PUT /api/templates/{templateId}
+     */
+    @PutMapping("/{templateId}")
+    public Result<TemplateVO> updateTemplate(@PathVariable Long templateId,
+                                             @RequestBody TemplateVO vo) {
+        log.info("更新模板, templateId={}", templateId);
+        return templateService.updateTemplate(templateId, vo);
+    }
+
+    /**
+     * 删除模板
+     * DELETE /api/templates/{templateId}
+     */
+    @DeleteMapping("/{templateId}")
+    public Result<Boolean> deleteTemplate(@PathVariable Long templateId) {
+        log.info("删除模板, templateId={}", templateId);
+        return templateService.deleteTemplate(templateId);
+    }
+
+    /**
      * 保存或更新模板档案配置（如 report_profile.json）
      * POST /api/templates/{templateId}/profile
      */

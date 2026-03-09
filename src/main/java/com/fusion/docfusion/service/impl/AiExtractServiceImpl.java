@@ -73,17 +73,30 @@ public class AiExtractServiceImpl implements AiExtractService {
         Map<String, String> result = new HashMap<>();
         JsonNode root = objectMapper.readTree(json);
 
-        // 按队友仓库 README 的示例结构解析：payload.data 里是字段名 -> 值
-        JsonNode dataNode = root.path("payload").path("data");
+        // 优先按最新约定解析：顶层 data 字段
+        JsonNode dataNode = root.path("data");
+        // 兼容旧格式：payload.data
+        if (!dataNode.isObject()) {
+            dataNode = root.path("payload").path("data");
+        }
+
         if (dataNode.isObject()) {
             Iterator<String> fieldNames = dataNode.fieldNames();
             while (fieldNames.hasNext()) {
                 String field = fieldNames.next();
-                String value = dataNode.get(field).asText();
+                JsonNode valueNode = dataNode.get(field);
+                String value;
+                if (valueNode == null || valueNode.isNull()) {
+                    value = "";
+                } else if (valueNode.isValueNode()) {
+                    value = valueNode.asText();
+                } else {
+                    value = objectMapper.writeValueAsString(valueNode);
+                }
                 result.put(field, value);
             }
         } else {
-            log.warn("AI 返回中未找到 payload.data 字段（已省略原始返回，len={}）", json == null ? 0 : json.length());
+            log.warn("AI 返回中未找到 data 或 payload.data 字段（已省略原始返回，len={}）", json == null ? 0 : json.length());
         }
         return result;
     }

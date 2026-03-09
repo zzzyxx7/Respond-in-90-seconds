@@ -20,9 +20,9 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.FillTask"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO fill_task (document_set_id, template_id, mode, user_requirement, status, result_file_path,
+        INSERT INTO fill_task (user_id, document_set_id, template_id, mode, user_requirement, status, result_file_path,
                                created_at, finished_at, error_message)
-        VALUES (#{documentSetId}, #{templateId}, #{mode}, #{userRequirement}, #{status}, #{resultFilePath},
+        VALUES (#{userId}, #{documentSetId}, #{templateId}, #{mode}, #{userRequirement}, #{status}, #{resultFilePath},
                 #{createdAt}, #{finishedAt}, #{errorMessage})
     </insert>
 
@@ -47,6 +47,9 @@
         SELECT *
         FROM fill_task
         <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
             <if test="mode != null and mode != ''">
                 AND mode = #{mode}
             </if>
