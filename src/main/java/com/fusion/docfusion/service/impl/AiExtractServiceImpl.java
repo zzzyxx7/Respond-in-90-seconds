@@ -2,6 +2,7 @@ package com.fusion.docfusion.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fusion.docfusion.dto.ExtractFieldResult;
 import com.fusion.docfusion.exception.BusinessException;
 import com.fusion.docfusion.service.AiExtractService;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.File;
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -35,7 +37,7 @@ public class AiExtractServiceImpl implements AiExtractService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
-    public Map<String, String> analyze(File file, String instruction) {
+    public Map<String, ExtractFieldResult> analyze(File file, String instruction) {
         if (file == null || !file.exists()) {
             throw new BusinessException("待分析的文件不存在");
         }
@@ -69,8 +71,8 @@ public class AiExtractServiceImpl implements AiExtractService {
         }
     }
 
-    private Map<String, String> parseResult(String json) throws Exception {
-        Map<String, String> result = new HashMap<>();
+    private Map<String, ExtractFieldResult> parseResult(String json) throws Exception {
+        Map<String, ExtractFieldResult> result = new HashMap<>();
         JsonNode root = objectMapper.readTree(json);
 
         // 优先按最新约定解析：顶层 data 字段
@@ -78,6 +80,12 @@ public class AiExtractServiceImpl implements AiExtractService {
         // 兼容旧格式：payload.data
         if (!dataNode.isObject()) {
             dataNode = root.path("payload").path("data");
+        }
+
+        // 解析可选的 confidence 字段：顶层 confidence 对象
+        JsonNode confidenceNode = root.path("confidence");
+        if (!confidenceNode.isObject()) {
+            confidenceNode = null;
         }
 
         if (dataNode.isObject()) {
@@ -93,7 +101,25 @@ public class AiExtractServiceImpl implements AiExtractService {
                 } else {
                     value = objectMapper.writeValueAsString(valueNode);
                 }
-                result.put(field, value);
+                BigDecimal confidence = null;
+                if (confidenceNode != null) {
+                    JsonNode confNode = confidenceNode.get(field);
+                    if (confNode != null && !confNode.isNull()) {
+                        if (confNode.isNumber()) {
+                            confidence = confNode.decimalValue();
+                        } else {
+                            try {
+                                confidence = new BigDecimal(confNode.asText());
+                            } catch (NumberFormatException ignore) {
+                                confidence = null;
+                            }
+                        }
+                    }
+                }
+                ExtractFieldResult fieldResult = new ExtractFieldResult();
+                fieldResult.setValue(value);
+                fieldResult.setConfidence(confidence);
+                result.put(field, fieldResult);
             }
         } else {
             log.warn("AI 返回中未找到 data 或 payload.data 字段（已省略原始返回，len={}）", json == null ? 0 : json.length());

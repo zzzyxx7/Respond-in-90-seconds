@@ -1,6 +1,7 @@
 package com.fusion.docfusion.service.impl;
 
 import com.fusion.docfusion.config.UploadProperties;
+import com.fusion.docfusion.dto.ExtractFieldResult;
 import com.fusion.docfusion.entity.Document;
 import com.fusion.docfusion.entity.ExtractedValue;
 import com.fusion.docfusion.entity.FieldSchema;
@@ -19,6 +20,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -56,7 +58,7 @@ public class ExtractionServiceImpl implements ExtractionService {
                 : instruction;
 
         // 调用 AI 服务进行抽取（当前若 AI 未部署，调用会失败，但代码结构已经就绪）
-        Map<String, String> extractedMap = aiExtractService.analyze(file, finalInstruction);
+        Map<String, ExtractFieldResult> extractedMap = aiExtractService.analyze(file, finalInstruction);
         if (extractedMap == null) {
             extractedMap = new HashMap<>();
         }
@@ -77,9 +79,14 @@ public class ExtractionServiceImpl implements ExtractionService {
 
         List<ExtractedValue> values = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
-        for (Map.Entry<String, String> entry : extractedMap.entrySet()) {
+        for (Map.Entry<String, ExtractFieldResult> entry : extractedMap.entrySet()) {
             String code = entry.getKey();
-            String value = entry.getValue();
+            ExtractFieldResult fieldResult = entry.getValue();
+            if (fieldResult == null) {
+                continue;
+            }
+            String value = fieldResult.getValue();
+            BigDecimal confidence = fieldResult.getConfidence();
             FieldSchema schema = schemaByCode.get(code);
             if (schema == null) {
                 log.warn("抽取到未知字段 code={}, documentId={}，已跳过", code, documentId);
@@ -89,7 +96,7 @@ public class ExtractionServiceImpl implements ExtractionService {
             ev.setDocumentId(documentId);
             ev.setFieldSchemaId(schema.getId());
             ev.setFieldValue(value);
-            ev.setConfidence(null);
+            ev.setConfidence(confidence);
             ev.setCreatedAt(now);
             values.add(ev);
         }

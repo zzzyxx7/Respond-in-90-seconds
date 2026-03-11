@@ -1,5 +1,7 @@
 package com.fusion.docfusion.service;
 
+import com.fusion.docfusion.dto.ExtractFieldResult;
+
 import java.io.File;
 import java.util.Map;
 
@@ -14,8 +16,8 @@ public interface AiExtractService {
      *
      * @param file        要分析的文件
      * @param instruction 抽取指令（例如“请提取字段：student_name, company, amount”）
-     * @return 字段编码 -> 抽取到的值
+     * @return 字段编码 -> 抽取结果（值 + 置信度）
      */
-    Map<String, String> analyze(File file, String instruction);
+    Map<String, ExtractFieldResult> analyze(File file, String instruction);
 }
 
