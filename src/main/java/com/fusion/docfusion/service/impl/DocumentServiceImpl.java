@@ -13,6 +13,7 @@ import com.fusion.docfusion.mapper.DocumentSetMapper;
 import com.fusion.docfusion.service.DocumentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,6 +41,10 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Result<DocumentSetVO> uploadDocuments(List<MultipartFile> files) {
+        Long currentUserId = currentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("请先登录再上传文档");
+        }
         if (files == null || files.isEmpty()) {
             throw new BusinessException("请至少上传一个文档");
         }
@@ -58,6 +63,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         DocumentSet set = new DocumentSet();
+        set.setOwnerId(currentUserId);
         set.setName(dirName);
         set.setCreatedAt(LocalDateTime.now());
         documentSetMapper.insert(set);
@@ -110,7 +116,11 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public Result<List<DocumentSetListItemVO>> listDocumentSets() {
-        List<DocumentSetListItemVO> list = documentSetMapper.selectAllForList();
+        Long currentUserId = currentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("请先登录查看文档集列表");
+        }
+        List<DocumentSetListItemVO> list = documentSetMapper.selectAllForList(currentUserId);
         return Result.success(list);
     }
 
@@ -121,6 +131,10 @@ public class DocumentServiceImpl implements DocumentService {
         if (set == null) {
             throw new BusinessException("文档集不存在");
         }
+        Long currentUserId = currentUserId();
+        if (currentUserId == null || (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId()))) {
+            throw new BusinessException("无权删除该文档集");
+        }
         int rows = documentSetMapper.deleteById(documentSetId);
         return Result.success(rows > 0);
     }
@@ -130,6 +144,10 @@ public class DocumentServiceImpl implements DocumentService {
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
             throw new BusinessException("文档集不存在");
+        }
+        Long currentUserId = currentUserId();
+        if (currentUserId == null || (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId()))) {
+            throw new BusinessException("无权查看该文档集");
         }
         List<Document> docs = documentMapper.selectByDocumentSetId(documentSetId);
         List<DocumentVO> list = docs.stream().map(d -> {
@@ -152,5 +170,17 @@ public class DocumentServiceImpl implements DocumentService {
     private static String getExtension(String filename) {
         int i = filename.lastIndexOf('.');
         return i < 0 ? "" : filename.substring(i + 1);
+    }
+
+    private static Long currentUserId() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) {
+            return null;
+        }
+        Object principal = auth.getPrincipal();
+        if (principal instanceof Long l) {
+            return l;
+        }
+        return null;
     }
 }

@@ -6,14 +6,15 @@
 
     <resultMap id="DocumentSetResultMap" type="com.fusion.docfusion.entity.DocumentSet">
         <id property="id" column="id"/>
+        <result property="ownerId" column="owner_id"/>
         <result property="name" column="name"/>
         <result property="createdAt" column="created_at"/>
     </resultMap>
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.DocumentSet"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO document_set (name, created_at)
-        VALUES (#{name}, #{createdAt})
+        INSERT INTO document_set (owner_id, name, created_at)
+        VALUES (#{ownerId}, #{name}, #{createdAt})
     </insert>
 
     <select id="selectById" resultMap="DocumentSetResultMap">
@@ -34,6 +35,7 @@
         SELECT ds.id, ds.name, ds.created_at,
                (SELECT COUNT(*) FROM document d WHERE d.document_set_id = ds.id) AS document_count
         FROM document_set ds
+        WHERE ds.owner_id = #{ownerId}
         ORDER BY ds.created_at DESC
     </select>
 </mapper>

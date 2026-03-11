@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 @Data
 public class Template {
     private Long id;
+    /** 创建该模板的用户ID，用于区分不同用户的模板空间 */
+    private Long ownerId;
     /** 所属报表类型ID，可为空表示未分类 */
     private Long reportTypeId;
     private String fileName;

@@ -32,6 +32,10 @@ public class TemplateServiceImpl implements TemplateService {
 
     @Override
     public Result<TemplateVO> uploadTemplate(MultipartFile file) {
+        Long currentUserId = currentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("请先登录再上传模板");
+        }
         if (file == null || file.isEmpty()) {
             throw new BusinessException("请选择模板文件");
         }
@@ -58,6 +62,7 @@ public class TemplateServiceImpl implements TemplateService {
         }
         String fileType = ext.equals("doc") || ext.equals("docx") ? "word" : "excel";
         Template t = new Template();
+        t.setOwnerId(currentUserId);
         t.setReportTypeId(null);
         t.setFileName(originalFilename);
         t.setFileType(fileType);
@@ -71,14 +76,22 @@ public class TemplateServiceImpl implements TemplateService {
 
     @Override
     public Result<List<TemplateVO>> listTemplates() {
-        List<Template> list = templateMapper.selectAll();
+        Long currentUserId = currentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("请先登录查看模板列表");
+        }
+        List<Template> list = templateMapper.selectAllByOwner(currentUserId);
         List<TemplateVO> vos = list.stream().map(this::toVO).toList();
         return Result.success(vos);
     }
 
     @Override
     public Result<List<TemplateVO>> listByReportType(Long reportTypeId) {
-        List<Template> list = templateMapper.selectByReportTypeId(reportTypeId);
+        Long currentUserId = currentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("请先登录查看模板列表");
+        }
+        List<Template> list = templateMapper.selectByReportTypeIdAndOwner(reportTypeId, currentUserId);
         List<TemplateVO> vos = list.stream().map(this::toVO).toList();
         return Result.success(vos);
     }
@@ -89,6 +102,10 @@ public class TemplateServiceImpl implements TemplateService {
         if (t == null) {
             throw new BusinessException("模板不存在");
         }
+        Long currentUserId = currentUserId();
+        if (currentUserId == null || (t.getOwnerId() != null && !currentUserId.equals(t.getOwnerId()))) {
+            throw new BusinessException("无权访问该模板");
+        }
         TemplateVO vo = toVO(t);
         return Result.success(vo);
     }
@@ -98,6 +115,10 @@ public class TemplateServiceImpl implements TemplateService {
         Template t = templateMapper.selectById(templateId);
         if (t == null) {
             throw new BusinessException("模板不存在");
+        }
+        Long currentUserId = currentUserId();
+        if (currentUserId == null || (t.getOwnerId() != null && !currentUserId.equals(t.getOwnerId()))) {
+            throw new BusinessException("无权修改该模板");
         }
         if (vo.getFileName() != null && !vo.getFileName().isBlank()) {
             t.setFileName(vo.getFileName().trim());
@@ -116,6 +137,10 @@ public class TemplateServiceImpl implements TemplateService {
         if (t == null) {
             throw new BusinessException("模板不存在");
         }
+        Long currentUserId = currentUserId();
+        if (currentUserId == null || (t.getOwnerId() != null && !currentUserId.equals(t.getOwnerId()))) {
+            throw new BusinessException("无权删除该模板");
+        }
         int rows = templateMapper.deleteById(templateId);
         return Result.success(rows > 0);
     }
@@ -133,5 +158,17 @@ public class TemplateServiceImpl implements TemplateService {
     private static String getExtension(String filename) {
         int i = filename.lastIndexOf('.');
         return i < 0 ? "" : filename.substring(i + 1);
+    }
+
+    private static Long currentUserId() {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) {
+            return null;
+        }
+        Object principal = auth.getPrincipal();
+        if (principal instanceof Long l) {
+            return l;
+        }
+        return null;
     }
 }

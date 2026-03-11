@@ -14,6 +14,7 @@ USE mydatabase;
  ******************************/
 CREATE TABLE IF NOT EXISTS document_set (
                                             id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '文档集ID',
+                                            owner_id BIGINT DEFAULT NULL COMMENT '创建该文档集的用户ID',
                                             name VARCHAR(255) NOT NULL COMMENT '文档集名称/描述，例如：官方测试集1',
                                             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -49,12 +50,14 @@ CREATE TABLE IF NOT EXISTS document (
  ******************************/
 CREATE TABLE IF NOT EXISTS template (
                                         id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '模板ID',
+                                        owner_id BIGINT DEFAULT NULL COMMENT '创建该模板的用户ID',
                                         report_type_id BIGINT DEFAULT NULL COMMENT '所属报表类型ID，可为空表示未分类',
                                         file_name VARCHAR(255) NOT NULL COMMENT '模板文件名，例如 template1.xlsx',
                                         file_type VARCHAR(32) NOT NULL COMMENT '模板类型：word/excel',
                                         file_path VARCHAR(512) NOT NULL COMMENT '模板文件在服务器上的路径',
                                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
 
+                                        INDEX idx_template_owner_id (owner_id),
                                         INDEX idx_template_report_type_id (report_type_id),
                                         CONSTRAINT fk_template_report_type
                                             FOREIGN KEY (report_type_id) REFERENCES report_type(id)

@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 @Data
 public class DocumentSet {
     private Long id;
+    /** 创建该文档集的用户ID，用于多用户隔离 */
+    private Long ownerId;
     private String name;
     private LocalDateTime createdAt;
 }

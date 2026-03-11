@@ -11,6 +11,6 @@ import java.util.List;
 public interface DocumentSetMapper {
     int insert(DocumentSet entity);
     DocumentSet selectById(@Param("id") Long id);
-    List<DocumentSetListItemVO> selectAllForList();
+    List<DocumentSetListItemVO> selectAllForList(@Param("ownerId") Long ownerId);
     int deleteById(@Param("id") Long id);
 }

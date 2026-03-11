@@ -43,9 +43,17 @@ public class FillServiceImpl implements FillService {
         Long documentSetId = request.getDocumentSetId();
         Long templateId = request.getTemplateId();
 
+        Long currentUserId = currentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("请先登录再提交填表任务");
+        }
+
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
             throw new BusinessException("文档集不存在");
+        }
+        if (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId())) {
+            throw new BusinessException("无权使用该文档集");
         }
         Template template = templateMapper.selectById(templateId);
         if (template == null) {
@@ -57,7 +65,7 @@ public class FillServiceImpl implements FillService {
         }
 
         FillTask task = new FillTask();
-        task.setUserId(currentUserId());
+        task.setUserId(currentUserId);
         task.setDocumentSetId(documentSetId);
         task.setTemplateId(templateId);
         task.setMode("TEMPLATE");
@@ -78,6 +86,10 @@ public class FillServiceImpl implements FillService {
         if (task == null) {
             throw new BusinessException("任务不存在");
         }
+        Long currentUserId = currentUserId();
+        if (currentUserId == null || (task.getUserId() != null && !currentUserId.equals(task.getUserId()))) {
+            throw new BusinessException("无权访问该任务");
+        }
         return Result.success(toVO(task));
     }
 
@@ -85,9 +97,17 @@ public class FillServiceImpl implements FillService {
     public Result<FillTaskVO> submitFree(FreeFillRequest request) {
         Long documentSetId = request.getDocumentSetId();
 
+        Long currentUserId = currentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("请先登录再提交填表任务");
+        }
+
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
             throw new BusinessException("文档集不存在");
+        }
+        if (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId())) {
+            throw new BusinessException("无权使用该文档集");
         }
         List<Document> docs = documentMapper.selectByDocumentSetId(documentSetId);
         if (docs.isEmpty()) {
@@ -95,7 +115,7 @@ public class FillServiceImpl implements FillService {
         }
 
         FillTask task = new FillTask();
-        task.setUserId(currentUserId());
+        task.setUserId(currentUserId);
         task.setDocumentSetId(documentSetId);
         task.setTemplateId(null);
         task.setMode("FREE");
