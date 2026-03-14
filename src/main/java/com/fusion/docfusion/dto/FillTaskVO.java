@@ -18,4 +18,6 @@ public class FillTaskVO {
     private String resultFilePath;
     private LocalDateTime createdAt;
     private LocalDateTime finishedAt;
+    /** 任务失败时的错误信息 */
+    private String errorMessage;
 }

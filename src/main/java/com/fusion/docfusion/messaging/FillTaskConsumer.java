@@ -6,6 +6,8 @@ import com.fusion.docfusion.entity.Document;
 import com.fusion.docfusion.entity.DocumentSet;
 import com.fusion.docfusion.entity.FillTask;
 import com.fusion.docfusion.entity.Template;
+import com.fusion.docfusion.enums.TaskMode;
+import com.fusion.docfusion.enums.TaskStatus;
 import com.fusion.docfusion.exception.BusinessException;
 import com.fusion.docfusion.mapper.DocumentMapper;
 import com.fusion.docfusion.mapper.DocumentSetMapper;
@@ -51,23 +53,23 @@ public class FillTaskConsumer {
         }
 
         try {
-            task.setStatus("RUNNING");
+            task.setStatus(TaskStatus.RUNNING.name());
             fillTaskMapper.updateById(task);
 
-            if ("TEMPLATE".equalsIgnoreCase(task.getMode())) {
+            if (TaskMode.TEMPLATE.name().equalsIgnoreCase(task.getMode())) {
                 processTemplateTask(task);
-            } else if ("FREE".equalsIgnoreCase(task.getMode())) {
+            } else if (TaskMode.FREE.name().equalsIgnoreCase(task.getMode())) {
                 processFreeTask(task);
             } else {
                 throw new BusinessException("未知任务模式: " + task.getMode());
             }
 
-            task.setStatus("SUCCESS");
+            task.setStatus(TaskStatus.SUCCESS.name());
             task.setFinishedAt(LocalDateTime.now());
             fillTaskMapper.updateById(task);
         } catch (Exception e) {
             log.error("异步任务处理异常, taskId={}", taskId, e);
-            task.setStatus("FAILED");
+            task.setStatus(TaskStatus.FAILED.name());
             task.setFinishedAt(LocalDateTime.now());
             task.setErrorMessage(e.getMessage());
             fillTaskMapper.updateById(task);

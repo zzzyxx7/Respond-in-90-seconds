@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS document_set (
                                             id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '文档集ID',
                                             owner_id BIGINT DEFAULT NULL COMMENT '创建该文档集的用户ID',
                                             name VARCHAR(255) NOT NULL COMMENT '文档集名称/描述，例如：官方测试集1',
-                                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+                                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                            INDEX idx_document_set_owner_id (owner_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     COMMENT='文档集：一次批量上传的文档集合';
 
@@ -44,7 +45,34 @@ CREATE TABLE IF NOT EXISTS document (
 
 
 /******************************
- * 3. 模板表：template
+ * 3. 用户表：user
+ * 最简用户信息，用于登录与任务归属
+ ******************************/
+CREATE TABLE IF NOT EXISTS `user` (
+                                    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',
+                                    username VARCHAR(100) NOT NULL UNIQUE COMMENT '用户名',
+                                    password VARCHAR(255) NOT NULL COMMENT 'BCrypt 加密后的密码',
+                                    role VARCHAR(50) NOT NULL DEFAULT 'USER' COMMENT '角色：USER/ADMIN',
+                                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    COMMENT='用户表：登录账号信息';
+
+
+/******************************
+ * 4. 报表类型表：report_type
+ * 描述“业务上的报表类别”，例如：合同收支汇总表、员工信息表等
+ ******************************/
+CREATE TABLE IF NOT EXISTS report_type (
+                                           id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '报表类型ID',
+                                           name VARCHAR(255) NOT NULL COMMENT '报表类型名称，例如 合同收支汇总表',
+                                           description VARCHAR(512) DEFAULT NULL COMMENT '报表类型说明，例如 适用于年度合同统计',
+                                           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    COMMENT='报表类型：描述业务上的报表类别，例如合同汇总表、员工信息表';
+
+
+/******************************
+ * 5. 模板表：template
  * 存每个 word / excel 模板文件的基本信息
  * 比赛中：评委上传的5个表格模板，就会各生成一条记录
  ******************************/
@@ -67,7 +95,7 @@ CREATE TABLE IF NOT EXISTS template (
 
 
 /******************************
- * 4. 填表任务表：fill_task
+ * 6. 填表任务表：fill_task
  * 一次“根据某个文档集 + 某个模板进行自动填表”的任务
  * 关系：
  *   document_set(1) ——> (N) fill_task
@@ -77,7 +105,7 @@ CREATE TABLE IF NOT EXISTS fill_task (
                                          id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '填表任务ID',
                                          user_id BIGINT DEFAULT NULL COMMENT '创建任务的用户ID，可为空（未登录）',
                                          document_set_id BIGINT NOT NULL COMMENT '使用的文档集ID',
-                                         template_id BIGINT NOT NULL COMMENT '使用的模板ID',
+                                         template_id BIGINT DEFAULT NULL COMMENT '使用的模板ID，FREE 模式为空',
                                          mode VARCHAR(32) NOT NULL DEFAULT 'TEMPLATE' COMMENT '任务模式：TEMPLATE（模板模式）/ FREE（自由模式）',
                                          user_requirement VARCHAR(512) DEFAULT NULL COMMENT '自由模式下的用户需求描述',
                                          status VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态：PENDING/RUNNING/SUCCESS/FAILED',
@@ -98,33 +126,6 @@ CREATE TABLE IF NOT EXISTS fill_task (
                                                  ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     COMMENT='填表任务：异步调用单元，记录每次自动填表的状态与结果';
-
-
-/******************************
- * 5. 用户表：user
- * 最简用户信息，用于登录与任务归属
- ******************************/
-CREATE TABLE IF NOT EXISTS user (
-                                    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',
-                                    username VARCHAR(100) NOT NULL UNIQUE COMMENT '用户名',
-                                    password VARCHAR(255) NOT NULL COMMENT 'BCrypt 加密后的密码',
-                                    role VARCHAR(50) NOT NULL DEFAULT 'USER' COMMENT '角色：USER/ADMIN',
-                                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    COMMENT='用户表：登录账号信息';
-
-
-/******************************
- * 6. 报表类型表：report_type
- * 描述“业务上的报表类别”，例如：合同收支汇总表、员工信息表等
- ******************************/
-CREATE TABLE IF NOT EXISTS report_type (
-                                           id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '报表类型ID',
-                                           name VARCHAR(255) NOT NULL COMMENT '报表类型名称，例如 合同收支汇总表',
-                                           description VARCHAR(512) DEFAULT NULL COMMENT '报表类型说明，例如 适用于年度合同统计',
-                                           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    COMMENT='报表类型：描述业务上的报表类别，例如合同汇总表、员工信息表';
 
 
 /******************************

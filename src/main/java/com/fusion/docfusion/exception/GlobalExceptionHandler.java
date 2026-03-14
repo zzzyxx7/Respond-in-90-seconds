@@ -23,6 +23,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<String> handleValidationException(MethodArgumentNotValidException e) {
         BindingResult bindingResult = e.getBindingResult();
         List<FieldError> fieldErrors = bindingResult.getFieldErrors();
@@ -31,7 +32,7 @@ public class GlobalExceptionHandler {
             msg.append(err.getField()).append(": ").append(err.getDefaultMessage()).append("; ");
         }
         log.warn("参数校验异常: {}", msg);
-        return Result.error(msg.toString());
+        return Result.error(400, msg.toString());
     }
 
     @ExceptionHandler(Exception.class)

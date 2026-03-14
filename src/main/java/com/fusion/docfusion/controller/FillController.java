@@ -5,6 +5,7 @@ import com.fusion.docfusion.config.UploadProperties;
 import com.fusion.docfusion.dto.FillRequest;
 import com.fusion.docfusion.dto.FillTaskVO;
 import com.fusion.docfusion.dto.FreeFillRequest;
+import com.fusion.docfusion.enums.TaskStatus;
 import com.fusion.docfusion.service.FillService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -82,7 +83,7 @@ public class FillController {
     public ResponseEntity<Resource> downloadResult(@PathVariable Long taskId) {
         log.info("下载填表结果, taskId={}", taskId);
         FillTaskVO task = fillService.getTask(taskId).getData();
-        if (task == null || !"SUCCESS".equals(task.getStatus()) || task.getResultFilePath() == null) {
+        if (task == null || !TaskStatus.SUCCESS.name().equals(task.getStatus()) || task.getResultFilePath() == null) {
             log.warn("下载失败：任务未成功或无结果文件, taskId={}, status={}, resultFilePath={}",
                     taskId, task == null ? null : task.getStatus(), task == null ? null : task.getResultFilePath());
             return ResponseEntity.notFound().build();

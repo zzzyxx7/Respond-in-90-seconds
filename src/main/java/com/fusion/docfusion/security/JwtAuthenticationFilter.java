@@ -41,9 +41,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String uri = request.getRequestURI();
-        // 放行登录与开发调试接口
-        if (uri.startsWith("/api/auth/")
-                || uri.startsWith("/api/dev/")) {
+        // 仅放行登录接口（不校验 JWT）；/api/dev 需携带 JWT 且为 ADMIN
+        if (uri.startsWith("/api/auth/")) {
             filterChain.doFilter(request, response);
             return;
         }

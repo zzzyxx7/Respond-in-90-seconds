@@ -102,6 +102,7 @@ public class ExtractionServiceImpl implements ExtractionService {
         }
 
         if (!values.isEmpty()) {
+            extractedValueMapper.deleteByDocumentId(documentId);
             extractedValueMapper.insertBatch(values);
             log.info("保存抽取结果 {} 条，documentId={}", values.size(), documentId);
         } else {

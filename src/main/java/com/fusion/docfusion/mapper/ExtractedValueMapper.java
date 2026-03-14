@@ -17,5 +17,10 @@ public interface ExtractedValueMapper {
     int insertBatch(@Param("list") List<ExtractedValue> list);
 
     List<ExtractedValue> selectByDocumentId(@Param("documentId") Long documentId);
+
+    /**
+     * 按文档删除已有抽取结果（同一文档重复抽取时先清再插，避免重复）
+     */
+    int deleteByDocumentId(@Param("documentId") Long documentId);
 }
 

@@ -13,8 +13,11 @@ import com.fusion.docfusion.exception.BusinessException;
 import com.fusion.docfusion.mapper.DocumentMapper;
 import com.fusion.docfusion.mapper.DocumentSetMapper;
 import com.fusion.docfusion.mapper.FillTaskMapper;
+import com.fusion.docfusion.enums.TaskMode;
+import com.fusion.docfusion.enums.TaskStatus;
 import com.fusion.docfusion.mapper.TemplateMapper;
 import com.fusion.docfusion.service.FillService;
+import com.fusion.docfusion.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.AmqpTemplate;
@@ -43,7 +46,7 @@ public class FillServiceImpl implements FillService {
         Long documentSetId = request.getDocumentSetId();
         Long templateId = request.getTemplateId();
 
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
             throw new BusinessException("请先登录再提交填表任务");
         }
@@ -68,9 +71,9 @@ public class FillServiceImpl implements FillService {
         task.setUserId(currentUserId);
         task.setDocumentSetId(documentSetId);
         task.setTemplateId(templateId);
-        task.setMode("TEMPLATE");
+        task.setMode(TaskMode.TEMPLATE.name());
         task.setUserRequirement(request.getUserRequirement());
-        task.setStatus("PENDING");
+        task.setStatus(TaskStatus.PENDING.name());
         task.setCreatedAt(LocalDateTime.now());
         fillTaskMapper.insert(task);
 
@@ -86,7 +89,7 @@ public class FillServiceImpl implements FillService {
         if (task == null) {
             throw new BusinessException("任务不存在");
         }
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (task.getUserId() != null && !currentUserId.equals(task.getUserId()))) {
             throw new BusinessException("无权访问该任务");
         }
@@ -97,7 +100,7 @@ public class FillServiceImpl implements FillService {
     public Result<FillTaskVO> submitFree(FreeFillRequest request) {
         Long documentSetId = request.getDocumentSetId();
 
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
             throw new BusinessException("请先登录再提交填表任务");
         }
@@ -118,9 +121,9 @@ public class FillServiceImpl implements FillService {
         task.setUserId(currentUserId);
         task.setDocumentSetId(documentSetId);
         task.setTemplateId(null);
-        task.setMode("FREE");
+        task.setMode(TaskMode.FREE.name());
         task.setUserRequirement(request.getUserRequirement());
-        task.setStatus("PENDING");
+        task.setStatus(TaskStatus.PENDING.name());
         task.setCreatedAt(LocalDateTime.now());
         fillTaskMapper.insert(task);
 
@@ -132,7 +135,7 @@ public class FillServiceImpl implements FillService {
 
     @Override
     public Result<List<FillTaskVO>> listTasks(String mode, String status, Integer page, Integer size) {
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
             throw new BusinessException("请先登录查看历史任务");
         }
@@ -143,18 +146,6 @@ public class FillServiceImpl implements FillService {
         List<FillTask> tasks = fillTaskMapper.selectByConditions(currentUserId, mode, status, pageSize, offset);
         List<FillTaskVO> vos = tasks.stream().map(FillServiceImpl::toVO).toList();
         return Result.success(vos);
-    }
-
-    private static Long currentUserId() {
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getPrincipal() == null) {
-            return null;
-        }
-        Object principal = auth.getPrincipal();
-        if (principal instanceof Long l) {
-            return l;
-        }
-        return null;
     }
 
     private static FillTaskVO toVO(FillTask task) {
@@ -169,6 +160,7 @@ public class FillServiceImpl implements FillService {
         vo.setResultFilePath(task.getResultFilePath());
         vo.setCreatedAt(task.getCreatedAt());
         vo.setFinishedAt(task.getFinishedAt());
+        vo.setErrorMessage(task.getErrorMessage());
         return vo;
     }
 }

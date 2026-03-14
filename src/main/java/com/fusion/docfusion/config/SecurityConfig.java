@@ -25,9 +25,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
-                        // 登录与开发调试接口
+                        // 登录公开
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/dev/**").permitAll()
+                        // 开发调试接口仅管理员可访问
+                        .requestMatchers("/api/dev/**").hasRole("ADMIN")
                         // 核心业务接口：未登录也可使用
                         .requestMatchers("/api/documents/**").permitAll()
                         .requestMatchers("/api/templates/**").permitAll()

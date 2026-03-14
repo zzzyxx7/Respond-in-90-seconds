@@ -6,6 +6,7 @@ import com.fusion.docfusion.dto.TemplateVO;
 import com.fusion.docfusion.entity.Template;
 import com.fusion.docfusion.exception.BusinessException;
 import com.fusion.docfusion.mapper.TemplateMapper;
+import com.fusion.docfusion.security.SecurityUtils;
 import com.fusion.docfusion.service.TemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,7 +33,7 @@ public class TemplateServiceImpl implements TemplateService {
 
     @Override
     public Result<TemplateVO> uploadTemplate(MultipartFile file) {
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
             throw new BusinessException("请先登录再上传模板");
         }
@@ -76,7 +77,7 @@ public class TemplateServiceImpl implements TemplateService {
 
     @Override
     public Result<List<TemplateVO>> listTemplates() {
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
             throw new BusinessException("请先登录查看模板列表");
         }
@@ -87,7 +88,7 @@ public class TemplateServiceImpl implements TemplateService {
 
     @Override
     public Result<List<TemplateVO>> listByReportType(Long reportTypeId) {
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
             throw new BusinessException("请先登录查看模板列表");
         }
@@ -102,7 +103,7 @@ public class TemplateServiceImpl implements TemplateService {
         if (t == null) {
             throw new BusinessException("模板不存在");
         }
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (t.getOwnerId() != null && !currentUserId.equals(t.getOwnerId()))) {
             throw new BusinessException("无权访问该模板");
         }
@@ -116,7 +117,7 @@ public class TemplateServiceImpl implements TemplateService {
         if (t == null) {
             throw new BusinessException("模板不存在");
         }
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (t.getOwnerId() != null && !currentUserId.equals(t.getOwnerId()))) {
             throw new BusinessException("无权修改该模板");
         }
@@ -137,7 +138,7 @@ public class TemplateServiceImpl implements TemplateService {
         if (t == null) {
             throw new BusinessException("模板不存在");
         }
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (t.getOwnerId() != null && !currentUserId.equals(t.getOwnerId()))) {
             throw new BusinessException("无权删除该模板");
         }
@@ -160,15 +161,4 @@ public class TemplateServiceImpl implements TemplateService {
         return i < 0 ? "" : filename.substring(i + 1);
     }
 
-    private static Long currentUserId() {
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getPrincipal() == null) {
-            return null;
-        }
-        Object principal = auth.getPrincipal();
-        if (principal instanceof Long l) {
-            return l;
-        }
-        return null;
-    }
 }

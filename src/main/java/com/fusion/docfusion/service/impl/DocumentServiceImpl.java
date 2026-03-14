@@ -10,10 +10,10 @@ import com.fusion.docfusion.entity.DocumentSet;
 import com.fusion.docfusion.exception.BusinessException;
 import com.fusion.docfusion.mapper.DocumentMapper;
 import com.fusion.docfusion.mapper.DocumentSetMapper;
+import com.fusion.docfusion.security.SecurityUtils;
 import com.fusion.docfusion.service.DocumentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -41,7 +41,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Result<DocumentSetVO> uploadDocuments(List<MultipartFile> files) {
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
             throw new BusinessException("请先登录再上传文档");
         }
@@ -116,7 +116,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public Result<List<DocumentSetListItemVO>> listDocumentSets() {
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
             throw new BusinessException("请先登录查看文档集列表");
         }
@@ -131,7 +131,7 @@ public class DocumentServiceImpl implements DocumentService {
         if (set == null) {
             throw new BusinessException("文档集不存在");
         }
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId()))) {
             throw new BusinessException("无权删除该文档集");
         }
@@ -145,7 +145,7 @@ public class DocumentServiceImpl implements DocumentService {
         if (set == null) {
             throw new BusinessException("文档集不存在");
         }
-        Long currentUserId = currentUserId();
+        Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId()))) {
             throw new BusinessException("无权查看该文档集");
         }
@@ -172,15 +172,4 @@ public class DocumentServiceImpl implements DocumentService {
         return i < 0 ? "" : filename.substring(i + 1);
     }
 
-    private static Long currentUserId() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getPrincipal() == null) {
-            return null;
-        }
-        Object principal = auth.getPrincipal();
-        if (principal instanceof Long l) {
-            return l;
-        }
-        return null;
-    }
 }
