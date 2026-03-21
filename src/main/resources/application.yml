@@ -42,6 +42,13 @@ app:
     docs-dir: ${app.upload.base-dir}/docs
     templates-dir: ${app.upload.base-dir}/templates
     results-dir: ${app.upload.base-dir}/results
+  cleanup:
+    enabled: true
+    # 默认保留 30 天；比赛演示可临时调小为 7
+    retention-days: 30
+    batch-size: 200
+    # 每天凌晨 3 点清理一次
+    cron: "0 0 3 * * ?"
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml

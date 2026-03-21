@@ -210,16 +210,30 @@ public class FillServiceImpl implements FillService {
         vo.setStatus(step.getStatus());
         vo.setStartedAt(step.getStartedAt());
         vo.setFinishedAt(step.getFinishedAt());
-        vo.setDurationMs(step.getDurationMs());
+        vo.setDurationMs(calcStepDurationMs(step.getDurationMs(), step.getStartedAt(), step.getFinishedAt()));
         vo.setMessage(step.getMessage());
         vo.setErrorMessage(step.getErrorMessage());
         return vo;
     }
 
     private static Long calcTotalDurationMs(LocalDateTime createdAt, LocalDateTime finishedAt) {
-        if (createdAt == null || finishedAt == null) {
+        if (createdAt == null) {
             return null;
         }
-        return Duration.between(createdAt, finishedAt).toMillis();
+        LocalDateTime end = finishedAt != null ? finishedAt : LocalDateTime.now();
+        return Duration.between(createdAt, end).toMillis();
+    }
+
+    private static Long calcStepDurationMs(Long persistedDurationMs,
+                                           LocalDateTime startedAt,
+                                           LocalDateTime finishedAt) {
+        if (persistedDurationMs != null) {
+            return persistedDurationMs;
+        }
+        if (startedAt == null) {
+            return null;
+        }
+        LocalDateTime end = finishedAt != null ? finishedAt : LocalDateTime.now();
+        return Duration.between(startedAt, end).toMillis();
     }
 }
