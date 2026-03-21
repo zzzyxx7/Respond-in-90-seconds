@@ -6,6 +6,7 @@
 
     <resultMap id="TemplateResultMap" type="com.fusion.docfusion.entity.Template">
         <id property="id" column="id"/>
+        <result property="ownerId" column="owner_id"/>
         <result property="reportTypeId" column="report_type_id"/>
         <result property="fileName" column="file_name"/>
         <result property="fileType" column="file_type"/>
@@ -15,8 +16,8 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.Template"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO template (report_type_id, file_name, file_type, file_path, created_at)
-        VALUES (#{reportTypeId}, #{fileName}, #{fileType}, #{filePath}, #{createdAt})
+        INSERT INTO template (owner_id, report_type_id, file_name, file_type, file_path, created_at)
+        VALUES (#{ownerId}, #{reportTypeId}, #{fileName}, #{fileType}, #{filePath}, #{createdAt})
     </insert>
 
     <select id="selectById" resultMap="TemplateResultMap">
@@ -27,10 +28,25 @@
         SELECT * FROM template ORDER BY created_at DESC
     </select>
 
+    <select id="selectAllByOwner" resultMap="TemplateResultMap">
+        SELECT *
+        FROM template
+        WHERE owner_id = #{ownerId}
+        ORDER BY created_at DESC
+    </select>
+
     <select id="selectByReportTypeId" resultMap="TemplateResultMap">
         SELECT *
         FROM template
         WHERE report_type_id = #{reportTypeId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="selectByReportTypeIdAndOwner" resultMap="TemplateResultMap">
+        SELECT *
+        FROM template
+        WHERE report_type_id = #{reportTypeId}
+          AND owner_id = #{ownerId}
         ORDER BY created_at DESC
     </select>
 

@@ -32,5 +32,9 @@
         SELECT * FROM extracted_value WHERE document_id = #{documentId}
     </select>
 
+    <delete id="deleteByDocumentId">
+        DELETE FROM extracted_value WHERE document_id = #{documentId}
+    </delete>
+
 </mapper>
 

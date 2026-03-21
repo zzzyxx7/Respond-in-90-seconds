@@ -129,7 +129,37 @@ CREATE TABLE IF NOT EXISTS fill_task (
 
 
 /******************************
- * 7. 模板档案表：template_profile
+ * 7. 任务步骤表：fill_task_step
+ * 记录任务执行链路（步骤、开始/结束、耗时、错误信息）
+ * 关系：
+ *   fill_task(1) ——> (N) fill_task_step
+ ******************************/
+CREATE TABLE IF NOT EXISTS fill_task_step (
+                                             id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '任务步骤ID',
+                                             task_id BIGINT NOT NULL COMMENT '所属任务ID',
+                                             step_code VARCHAR(64) NOT NULL COMMENT '步骤编码：RAG/EXTRACT/FILL/GENERATE 等',
+                                             step_name VARCHAR(128) NOT NULL COMMENT '步骤名称（展示用）',
+                                             status VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT '步骤状态：PENDING/RUNNING/SUCCESS/FAILED/SKIPPED',
+                                             started_at DATETIME DEFAULT NULL COMMENT '开始时间',
+                                             finished_at DATETIME DEFAULT NULL COMMENT '结束时间',
+                                             duration_ms BIGINT DEFAULT NULL COMMENT '耗时（毫秒）',
+                                             message VARCHAR(512) DEFAULT NULL COMMENT '补充信息（如命中文档数/字段数等）',
+                                             error_message VARCHAR(512) DEFAULT NULL COMMENT '失败原因（如失败）',
+                                             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+                                             INDEX idx_fill_task_step_task_id (task_id),
+                                             UNIQUE KEY uk_fill_task_step_task_step (task_id, step_code),
+
+                                             CONSTRAINT fk_fill_task_step_task
+                                                 FOREIGN KEY (task_id) REFERENCES fill_task(id)
+                                                     ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    COMMENT='填表任务步骤：用于展示任务链路与耗时';
+
+
+/******************************
+ * 8. 模板档案表：template_profile
  * 存每个模板的配置档案（如 report_profile.json）
  * 关系：
  *   template(1) ——> (N) template_profile（当前业务可约定一模板一档案，表结构支持多版本扩展）
@@ -150,7 +180,7 @@ CREATE TABLE IF NOT EXISTS template_profile (
 
 
 /******************************
- * 8. 字段定义表：field_schema
+ * 9. 字段定义表：field_schema
  * 描述“系统里可以抽取哪些字段”
  * 不绑定具体业务场景，只是一个字段字典
  ******************************/
@@ -167,7 +197,7 @@ CREATE TABLE IF NOT EXISTS field_schema (
 
 
 /******************************
- * 9. 模板字段表：template_field
+ * 10. 模板字段表：template_field
  * 描述“某个模板中，哪个位置要填哪个字段”
  * 关系：
  *   template(1)     ——> (N) template_field
@@ -195,7 +225,7 @@ CREATE TABLE IF NOT EXISTS template_field (
 
 
 /******************************
- * 10. 抽取结果表：extracted_value
+ * 11. 抽取结果表：extracted_value
  * 存“某个文档里抽取到的某个字段的值”
  * 关系：
  *   document(1)      ——> (N) extracted_value

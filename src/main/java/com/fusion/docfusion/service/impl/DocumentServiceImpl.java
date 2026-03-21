@@ -33,6 +33,12 @@ import java.util.UUID;
 public class DocumentServiceImpl implements DocumentService {
 
     private static final List<String> ALLOWED_TYPES = List.of("docx", "md", "xlsx", "txt", "pdf");
+    /**
+     * 单次上传文档集的“总大小”上限（bytes）。
+     * 这里用于防止一次性上传几十 GB 导致内存/磁盘压力。
+     * 同时也对齐你 application.yml 里的 max-request-size（100MB）。
+     */
+    private static final long MAX_TOTAL_UPLOAD_BYTES = 100L * 1024 * 1024;
 
     private final UploadProperties uploadProperties;
     private final DocumentSetMapper documentSetMapper;
@@ -48,6 +54,19 @@ public class DocumentServiceImpl implements DocumentService {
         if (files == null || files.isEmpty()) {
             throw new BusinessException("请至少上传一个文档");
         }
+
+        long totalSize = 0L;
+        for (MultipartFile f : files) {
+            if (f == null) continue;
+            long size = f.getSize();
+            if (size > 0) {
+                totalSize += size;
+            }
+        }
+        if (totalSize > MAX_TOTAL_UPLOAD_BYTES) {
+            throw new BusinessException(400, "单次上传文件总大小过大，请控制在 100MB 以内");
+        }
+
         Path basePath = Paths.get(uploadProperties.getDocsDir());
         try {
             Files.createDirectories(basePath);
@@ -72,22 +91,31 @@ public class DocumentServiceImpl implements DocumentService {
         List<DocumentVO> docList = new ArrayList<>();
         for (MultipartFile file : files) {
             String originalFilename = file.getOriginalFilename();
-            if (originalFilename == null || originalFilename.isBlank()) continue;
-            String ext = getExtension(originalFilename).toLowerCase();
+            String safeFilename = sanitizeFilename(originalFilename);
+            if (safeFilename == null || safeFilename.isBlank()) continue;
+
+            String ext = getExtension(safeFilename).toLowerCase();
             if (!ALLOWED_TYPES.contains(ext)) {
-                log.warn("跳过不支持的类型: {}", originalFilename);
+                log.warn("跳过不支持的类型: {}", safeFilename);
                 continue;
             }
-            String savedName = UUID.randomUUID().toString() + "_" + originalFilename;
-            Path target = setPath.resolve(savedName);
+            String savedName = UUID.randomUUID().toString() + "_" + safeFilename;
+
+            // 防止路径穿越：确保最终落点仍在 setPath 内
+            Path normalizedSetPath = setPath.normalize();
+            Path target = setPath.resolve(savedName).normalize();
+            if (!target.startsWith(normalizedSetPath)) {
+                throw new BusinessException(400, "非法文件名或路径");
+            }
+
             try {
                 file.transferTo(target.toFile());
             } catch (IOException e) {
-                throw new BusinessException("保存文件失败: " + originalFilename + ", " + e.getMessage());
+                throw new BusinessException("保存文件失败: " + safeFilename + ", " + e.getMessage());
             }
             Document doc = new Document();
             doc.setDocumentSetId(documentSetId);
-            doc.setFileName(originalFilename);
+            doc.setFileName(safeFilename);
             doc.setFileType(ext);
             doc.setFilePath(dirName + "/" + savedName);
             doc.setFileSize(file.getSize());
@@ -170,6 +198,25 @@ public class DocumentServiceImpl implements DocumentService {
     private static String getExtension(String filename) {
         int i = filename.lastIndexOf('.');
         return i < 0 ? "" : filename.substring(i + 1);
+    }
+
+    /**
+     * 清理上传文件名，防止携带路径（如 C:\fakepath\xxx 或 ../xxx）。
+     * 保留后缀和主体信息用于保存展示。
+     */
+    private static String sanitizeFilename(String originalFilename) {
+        if (originalFilename == null) return null;
+        // 统一分隔符，去掉可能的目录部分
+        String name = originalFilename.replace('\\', '/');
+        int idx = name.lastIndexOf('/');
+        if (idx >= 0) {
+            name = name.substring(idx + 1);
+        }
+        // 移除明显的路径穿越片段
+        name = name.replace("..", "");
+        // 防止换行/特殊字符干扰日志或展示
+        name = name.replace('\r', '_').replace('\n', '_');
+        return name.trim();
     }
 
 }

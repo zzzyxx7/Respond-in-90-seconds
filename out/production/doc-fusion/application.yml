@@ -20,6 +20,21 @@ spring:
     compose:
       enabled: false
 
+  rabbitmq:
+    host: ${doc.rabbitmq.host:localhost}
+    port: ${doc.rabbitmq.port:5672}
+    username: ${doc.rabbitmq.username:guest}
+    password: ${doc.rabbitmq.password:guest}
+    listener:
+      simple:
+        acknowledge-mode: manual
+        default-requeue-rejected: false
+
+  data:
+    redis:
+      host: ${doc.redis.host:localhost}
+      port: ${doc.redis.port:6379}
+
 # 本地文件存储路径（相对项目根或绝对路径）
 app:
   upload:
@@ -36,6 +51,16 @@ mybatis:
 
 ai:
   base-url: http://localhost:8000
+  # 无真实 AI 时打开 mock，可走通：提交任务 → MQ → 消费 → 步骤进度 → 抽取（mock）→ 结果文件
+  mock:
+    enabled: false
+    # 需符合 parseResult：顶层 data + 可选 confidence；键与 field_schema.code 一致才会入库
+    response-json: '{"data":{"demo_title":"Mock演示标题","demo_amount":"999.99"},"confidence":{"demo_title":0.99,"demo_amount":0.95}}'
+  client:
+    connect-timeout-ms: 5000
+    read-timeout-ms: 90000
+    max-attempts: 3
+    retry-interval-ms: 800
 
 logging:
   level:

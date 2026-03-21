@@ -65,4 +65,20 @@
             OFFSET #{offset}
         </if>
     </select>
+
+    <select id="countByConditions" resultType="long">
+        SELECT COUNT(*)
+        FROM fill_task
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="mode != null and mode != ''">
+                AND mode = #{mode}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+    </select>
 </mapper>

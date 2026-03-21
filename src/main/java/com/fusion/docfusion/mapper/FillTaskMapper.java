@@ -17,4 +17,8 @@ public interface FillTaskMapper {
                                       @Param("status") String status,
                                       @Param("limit") Integer limit,
                                       @Param("offset") Integer offset);
+
+    long countByConditions(@Param("userId") Long userId,
+                           @Param("mode") String mode,
+                           @Param("status") String status);
 }

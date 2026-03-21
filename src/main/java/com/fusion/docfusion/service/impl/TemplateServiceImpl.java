@@ -27,6 +27,11 @@ import java.util.UUID;
 public class TemplateServiceImpl implements TemplateService {
 
     private static final List<String> ALLOWED_TYPES = List.of("docx", "doc", "xlsx", "xls");
+    /**
+     * 单个模板文件大小上限（bytes），主要是“兜底”。
+     * Spring 的 max-file-size 已限制，但这里再加一层，错误信息更可控。
+     */
+    private static final long MAX_TEMPLATE_UPLOAD_BYTES = 50L * 1024 * 1024;
 
     private final UploadProperties uploadProperties;
     private final TemplateMapper templateMapper;
@@ -40,11 +45,16 @@ public class TemplateServiceImpl implements TemplateService {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("请选择模板文件");
         }
+        if (file.getSize() > MAX_TEMPLATE_UPLOAD_BYTES) {
+            throw new BusinessException(400, "模板文件过大，请控制在 50MB 以内");
+        }
+
         String originalFilename = file.getOriginalFilename();
-        if (originalFilename == null || originalFilename.isBlank()) {
+        String safeFilename = sanitizeFilename(originalFilename);
+        if (safeFilename == null || safeFilename.isBlank()) {
             throw new BusinessException("文件名无效");
         }
-        String ext = getExtension(originalFilename).toLowerCase();
+        String ext = getExtension(safeFilename).toLowerCase();
         if (!ALLOWED_TYPES.contains(ext)) {
             throw new BusinessException("仅支持 word(docx/doc) 或 excel(xlsx/xls) 模板");
         }
@@ -54,8 +64,15 @@ public class TemplateServiceImpl implements TemplateService {
         } catch (IOException e) {
             throw new BusinessException("创建模板目录失败: " + e.getMessage());
         }
-        String savedName = UUID.randomUUID().toString() + "_" + originalFilename;
-        Path target = basePath.resolve(savedName);
+        String savedName = UUID.randomUUID().toString() + "_" + safeFilename;
+
+        // 防止路径穿越：确保最终落点仍在 basePath 内
+        Path normalizedBasePath = basePath.normalize();
+        Path target = basePath.resolve(savedName).normalize();
+        if (!target.startsWith(normalizedBasePath)) {
+            throw new BusinessException(400, "非法模板文件名或路径");
+        }
+
         try {
             file.transferTo(target.toFile());
         } catch (IOException e) {
@@ -65,7 +82,7 @@ public class TemplateServiceImpl implements TemplateService {
         Template t = new Template();
         t.setOwnerId(currentUserId);
         t.setReportTypeId(null);
-        t.setFileName(originalFilename);
+        t.setFileName(safeFilename);
         t.setFileType(fileType);
         t.setFilePath(savedName);
         t.setCreatedAt(LocalDateTime.now());
@@ -159,6 +176,21 @@ public class TemplateServiceImpl implements TemplateService {
     private static String getExtension(String filename) {
         int i = filename.lastIndexOf('.');
         return i < 0 ? "" : filename.substring(i + 1);
+    }
+
+    /**
+     * 清理上传文件名，防止携带路径（如 C:\fakepath\xxx 或 ../xxx）。
+     */
+    private static String sanitizeFilename(String originalFilename) {
+        if (originalFilename == null) return null;
+        String name = originalFilename.replace('\\', '/');
+        int idx = name.lastIndexOf('/');
+        if (idx >= 0) {
+            name = name.substring(idx + 1);
+        }
+        name = name.replace("..", "");
+        name = name.replace('\r', '_').replace('\n', '_');
+        return name.trim();
     }
 
 }

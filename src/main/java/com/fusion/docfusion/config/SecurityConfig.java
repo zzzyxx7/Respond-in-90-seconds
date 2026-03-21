@@ -29,11 +29,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         // 开发调试接口仅管理员可访问
                         .requestMatchers("/api/dev/**").hasRole("ADMIN")
-                        // 核心业务接口：未登录也可使用
-                        .requestMatchers("/api/documents/**").permitAll()
-                        .requestMatchers("/api/templates/**").permitAll()
-                        .requestMatchers("/api/fill/**").permitAll()
+                        // 只保留少量公开读取：报表类型（不涉及用户数据隔离）
                         .requestMatchers("/api/report-types/**").permitAll()
+                        // 文档/模板/填表都属于用户隔离数据：要求登录
+                        .requestMatchers("/api/documents/**").authenticated()
+                        .requestMatchers("/api/templates/**").authenticated()
+                        // 提交/查询任务/下载结果都属于消耗或敏感数据：要求登录
+                        .requestMatchers("/api/fill/**").authenticated()
                         // 其他接口默认需要登录（目前基本没有）
                         .anyRequest().authenticated()
                 );

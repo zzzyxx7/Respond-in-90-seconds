@@ -2,6 +2,7 @@ package com.fusion.docfusion.service;
 
 import com.fusion.docfusion.common.Result;
 import com.fusion.docfusion.dto.FillRequest;
+import com.fusion.docfusion.dto.FillTaskListPageVO;
 import com.fusion.docfusion.dto.FillTaskVO;
 import com.fusion.docfusion.dto.FreeFillRequest;
 
@@ -27,7 +28,7 @@ public interface FillService {
     Result<FillTaskVO> submitFree(FreeFillRequest request);
 
     /**
-     * 查询任务列表（简单分页）
+     * 查询任务列表（分页，含 total / hasMore）
      */
-    Result<java.util.List<FillTaskVO>> listTasks(String mode, String status, Integer page, Integer size);
+    Result<FillTaskListPageVO> listTasks(String mode, String status, Integer page, Integer size);
 }

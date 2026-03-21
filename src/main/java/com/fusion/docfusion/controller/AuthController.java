@@ -3,6 +3,7 @@ package com.fusion.docfusion.controller;
 import com.fusion.docfusion.common.Result;
 import com.fusion.docfusion.dto.LoginRequest;
 import com.fusion.docfusion.dto.LoginResponse;
+import com.fusion.docfusion.dto.RegisterRequest;
 import com.fusion.docfusion.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,16 @@ public class AuthController {
     public Result<LoginResponse> login(@RequestBody @Valid LoginRequest request) {
         log.info("用户登录, username={}", request.getUsername());
         return authService.login(request);
+    }
+
+    /**
+     * 注册普通用户，成功后直接返回 token（便于联调）。
+     * POST /api/auth/register
+     */
+    @PostMapping("/register")
+    public Result<LoginResponse> register(@RequestBody @Valid RegisterRequest request) {
+        log.info("用户注册, username={}", request.getUsername());
+        return authService.register(request);
     }
 }
 

@@ -3,6 +3,7 @@ package com.fusion.docfusion.controller;
 import com.fusion.docfusion.common.Result;
 import com.fusion.docfusion.config.UploadProperties;
 import com.fusion.docfusion.dto.FillRequest;
+import com.fusion.docfusion.dto.FillTaskListPageVO;
 import com.fusion.docfusion.dto.FillTaskVO;
 import com.fusion.docfusion.dto.FreeFillRequest;
 import com.fusion.docfusion.enums.TaskStatus;
@@ -67,10 +68,10 @@ public class FillController {
      * GET /api/fill/tasks?mode=TEMPLATE&status=SUCCESS&page=1&size=20
      */
     @GetMapping("/tasks")
-    public Result<java.util.List<FillTaskVO>> listTasks(@RequestParam(value = "mode", required = false) String mode,
-                                                        @RequestParam(value = "status", required = false) String status,
-                                                        @RequestParam(value = "page", required = false) Integer page,
-                                                        @RequestParam(value = "size", required = false) Integer size) {
+    public Result<FillTaskListPageVO> listTasks(@RequestParam(value = "mode", required = false) String mode,
+                                                @RequestParam(value = "status", required = false) String status,
+                                                @RequestParam(value = "page", required = false) Integer page,
+                                                @RequestParam(value = "size", required = false) Integer size) {
         log.info("查询填表任务列表, mode={}, status={}, page={}, size={}", mode, status, page, size);
         return fillService.listTasks(mode, status, page, size);
     }
@@ -89,7 +90,14 @@ public class FillController {
             return ResponseEntity.notFound().build();
         }
         Path resultsDir = Paths.get(uploadProperties.getResultsDir());
-        Path filePath = resultsDir.resolve(task.getResultFilePath());
+        Path normalizedResultsDir = resultsDir.normalize();
+        Path filePath = resultsDir.resolve(task.getResultFilePath()).normalize();
+        // 防止路径穿越（即使 task.resultFilePath 理论上是后端生成的，也做兜底校验）
+        if (!filePath.startsWith(normalizedResultsDir)) {
+            log.warn("下载失败：结果文件落点不在结果目录内, taskId={}, path={}",
+                    taskId, filePath);
+            return ResponseEntity.notFound().build();
+        }
         try {
             Resource resource = new UrlResource(filePath.toUri());
             if (!resource.exists() || !resource.isReadable()) {
@@ -98,10 +106,11 @@ public class FillController {
             }
             String contentType = "application/octet-stream";
             String filename = task.getResultFilePath();
+            // 兼容 '/' 和 '\'
             int lastSlash = filename.lastIndexOf('/');
-            if (lastSlash >= 0) {
-                filename = filename.substring(lastSlash + 1);
-            }
+            int lastBackslash = filename.lastIndexOf('\\');
+            int idx = Math.max(lastSlash, lastBackslash);
+            if (idx >= 0) filename = filename.substring(idx + 1);
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(contentType))
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")

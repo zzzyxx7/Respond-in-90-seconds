@@ -14,8 +14,10 @@ USE mydatabase;
  ******************************/
 CREATE TABLE IF NOT EXISTS document_set (
                                             id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '文档集ID',
+                                            owner_id BIGINT DEFAULT NULL COMMENT '创建该文档集的用户ID',
                                             name VARCHAR(255) NOT NULL COMMENT '文档集名称/描述，例如：官方测试集1',
-                                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+                                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                            INDEX idx_document_set_owner_id (owner_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     COMMENT='文档集：一次批量上传的文档集合';
 
@@ -43,18 +45,47 @@ CREATE TABLE IF NOT EXISTS document (
 
 
 /******************************
- * 3. 模板表：template
+ * 3. 用户表：user
+ * 最简用户信息，用于登录与任务归属
+ ******************************/
+CREATE TABLE IF NOT EXISTS `user` (
+                                    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',
+                                    username VARCHAR(100) NOT NULL UNIQUE COMMENT '用户名',
+                                    password VARCHAR(255) NOT NULL COMMENT 'BCrypt 加密后的密码',
+                                    role VARCHAR(50) NOT NULL DEFAULT 'USER' COMMENT '角色：USER/ADMIN',
+                                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    COMMENT='用户表：登录账号信息';
+
+
+/******************************
+ * 4. 报表类型表：report_type
+ * 描述“业务上的报表类别”，例如：合同收支汇总表、员工信息表等
+ ******************************/
+CREATE TABLE IF NOT EXISTS report_type (
+                                           id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '报表类型ID',
+                                           name VARCHAR(255) NOT NULL COMMENT '报表类型名称，例如 合同收支汇总表',
+                                           description VARCHAR(512) DEFAULT NULL COMMENT '报表类型说明，例如 适用于年度合同统计',
+                                           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    COMMENT='报表类型：描述业务上的报表类别，例如合同汇总表、员工信息表';
+
+
+/******************************
+ * 5. 模板表：template
  * 存每个 word / excel 模板文件的基本信息
  * 比赛中：评委上传的5个表格模板，就会各生成一条记录
  ******************************/
 CREATE TABLE IF NOT EXISTS template (
                                         id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '模板ID',
+                                        owner_id BIGINT DEFAULT NULL COMMENT '创建该模板的用户ID',
                                         report_type_id BIGINT DEFAULT NULL COMMENT '所属报表类型ID，可为空表示未分类',
                                         file_name VARCHAR(255) NOT NULL COMMENT '模板文件名，例如 template1.xlsx',
                                         file_type VARCHAR(32) NOT NULL COMMENT '模板类型：word/excel',
                                         file_path VARCHAR(512) NOT NULL COMMENT '模板文件在服务器上的路径',
                                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
 
+                                        INDEX idx_template_owner_id (owner_id),
                                         INDEX idx_template_report_type_id (report_type_id),
                                         CONSTRAINT fk_template_report_type
                                             FOREIGN KEY (report_type_id) REFERENCES report_type(id)
@@ -64,7 +95,7 @@ CREATE TABLE IF NOT EXISTS template (
 
 
 /******************************
- * 4. 填表任务表：fill_task
+ * 6. 填表任务表：fill_task
  * 一次“根据某个文档集 + 某个模板进行自动填表”的任务
  * 关系：
  *   document_set(1) ——> (N) fill_task
@@ -74,7 +105,7 @@ CREATE TABLE IF NOT EXISTS fill_task (
                                          id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '填表任务ID',
                                          user_id BIGINT DEFAULT NULL COMMENT '创建任务的用户ID，可为空（未登录）',
                                          document_set_id BIGINT NOT NULL COMMENT '使用的文档集ID',
-                                         template_id BIGINT NOT NULL COMMENT '使用的模板ID',
+                                         template_id BIGINT DEFAULT NULL COMMENT '使用的模板ID，FREE 模式为空',
                                          mode VARCHAR(32) NOT NULL DEFAULT 'TEMPLATE' COMMENT '任务模式：TEMPLATE（模板模式）/ FREE（自由模式）',
                                          user_requirement VARCHAR(512) DEFAULT NULL COMMENT '自由模式下的用户需求描述',
                                          status VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态：PENDING/RUNNING/SUCCESS/FAILED',
@@ -98,34 +129,37 @@ CREATE TABLE IF NOT EXISTS fill_task (
 
 
 /******************************
- * 5. 用户表：user
- * 最简用户信息，用于登录与任务归属
+ * 7. 任务步骤表：fill_task_step
+ * 记录任务执行链路（步骤、开始/结束、耗时、错误信息）
+ * 关系：
+ *   fill_task(1) ——> (N) fill_task_step
  ******************************/
-CREATE TABLE IF NOT EXISTS user (
-                                    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',
-                                    username VARCHAR(100) NOT NULL UNIQUE COMMENT '用户名',
-                                    password VARCHAR(255) NOT NULL COMMENT 'BCrypt 加密后的密码',
-                                    role VARCHAR(50) NOT NULL DEFAULT 'USER' COMMENT '角色：USER/ADMIN',
-                                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+CREATE TABLE IF NOT EXISTS fill_task_step (
+                                             id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '任务步骤ID',
+                                             task_id BIGINT NOT NULL COMMENT '所属任务ID',
+                                             step_code VARCHAR(64) NOT NULL COMMENT '步骤编码：RAG/EXTRACT/FILL/GENERATE 等',
+                                             step_name VARCHAR(128) NOT NULL COMMENT '步骤名称（展示用）',
+                                             status VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT '步骤状态：PENDING/RUNNING/SUCCESS/FAILED/SKIPPED',
+                                             started_at DATETIME DEFAULT NULL COMMENT '开始时间',
+                                             finished_at DATETIME DEFAULT NULL COMMENT '结束时间',
+                                             duration_ms BIGINT DEFAULT NULL COMMENT '耗时（毫秒）',
+                                             message VARCHAR(512) DEFAULT NULL COMMENT '补充信息（如命中文档数/字段数等）',
+                                             error_message VARCHAR(512) DEFAULT NULL COMMENT '失败原因（如失败）',
+                                             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+                                             INDEX idx_fill_task_step_task_id (task_id),
+                                             UNIQUE KEY uk_fill_task_step_task_step (task_id, step_code),
+
+                                             CONSTRAINT fk_fill_task_step_task
+                                                 FOREIGN KEY (task_id) REFERENCES fill_task(id)
+                                                     ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    COMMENT='用户表：登录账号信息';
+    COMMENT='填表任务步骤：用于展示任务链路与耗时';
 
 
 /******************************
- * 6. 报表类型表：report_type
- * 描述“业务上的报表类别”，例如：合同收支汇总表、员工信息表等
- ******************************/
-CREATE TABLE IF NOT EXISTS report_type (
-                                           id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '报表类型ID',
-                                           name VARCHAR(255) NOT NULL COMMENT '报表类型名称，例如 合同收支汇总表',
-                                           description VARCHAR(512) DEFAULT NULL COMMENT '报表类型说明，例如 适用于年度合同统计',
-                                           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    COMMENT='报表类型：描述业务上的报表类别，例如合同汇总表、员工信息表';
-
-
-/******************************
- * 7. 模板档案表：template_profile
+ * 8. 模板档案表：template_profile
  * 存每个模板的配置档案（如 report_profile.json）
  * 关系：
  *   template(1) ——> (N) template_profile（当前业务可约定一模板一档案，表结构支持多版本扩展）
@@ -146,7 +180,7 @@ CREATE TABLE IF NOT EXISTS template_profile (
 
 
 /******************************
- * 8. 字段定义表：field_schema
+ * 9. 字段定义表：field_schema
  * 描述“系统里可以抽取哪些字段”
  * 不绑定具体业务场景，只是一个字段字典
  ******************************/
@@ -163,7 +197,7 @@ CREATE TABLE IF NOT EXISTS field_schema (
 
 
 /******************************
- * 9. 模板字段表：template_field
+ * 10. 模板字段表：template_field
  * 描述“某个模板中，哪个位置要填哪个字段”
  * 关系：
  *   template(1)     ——> (N) template_field
@@ -191,7 +225,7 @@ CREATE TABLE IF NOT EXISTS template_field (
 
 
 /******************************
- * 10. 抽取结果表：extracted_value
+ * 11. 抽取结果表：extracted_value
  * 存“某个文档里抽取到的某个字段的值”
  * 关系：
  *   document(1)      ——> (N) extracted_value
