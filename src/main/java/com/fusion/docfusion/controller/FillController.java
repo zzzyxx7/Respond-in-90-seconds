@@ -6,7 +6,11 @@ import com.fusion.docfusion.dto.FillRequest;
 import com.fusion.docfusion.dto.FillTaskListPageVO;
 import com.fusion.docfusion.dto.FillTaskVO;
 import com.fusion.docfusion.dto.FreeFillRequest;
+import com.fusion.docfusion.entity.DocumentSet;
+import com.fusion.docfusion.entity.Template;
 import com.fusion.docfusion.enums.TaskStatus;
+import com.fusion.docfusion.mapper.DocumentSetMapper;
+import com.fusion.docfusion.mapper.TemplateMapper;
 import com.fusion.docfusion.service.FillService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -14,12 +18,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletResponse;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 /**
  * 填表任务：提交填表、查询任务、下载结果文件
@@ -32,6 +39,8 @@ public class FillController {
 
     private final FillService fillService;
     private final UploadProperties uploadProperties;
+    private final DocumentSetMapper documentSetMapper;
+    private final TemplateMapper templateMapper;
 
     /**
      * 提交填表任务（同步执行，比赛要求单次 ≤90 秒）
@@ -64,6 +73,26 @@ public class FillController {
     }
 
     /**
+     * 人工重跑（仅 FAILED/TIMEOUT 允许）。
+     * POST /api/fill/tasks/{taskId}/rerun
+     */
+    @PostMapping("/tasks/{taskId}/rerun")
+    public Result<FillTaskVO> rerunTask(@PathVariable Long taskId) {
+        log.info("人工重跑填表任务, taskId={}", taskId);
+        return fillService.rerunTask(taskId);
+    }
+
+    /**
+     * 取消任务（仅 PENDING/RUNNING 允许）。
+     * POST /api/fill/tasks/{taskId}/cancel
+     */
+    @PostMapping("/tasks/{taskId}/cancel")
+    public Result<FillTaskVO> cancelTask(@PathVariable Long taskId) {
+        log.info("取消填表任务, taskId={}", taskId);
+        return fillService.cancelTask(taskId);
+    }
+
+    /**
      * 查询任务列表（支持按模式和状态简单筛选）
      * GET /api/fill/tasks?mode=TEMPLATE&status=SUCCESS&page=1&size=20
      */
@@ -81,13 +110,14 @@ public class FillController {
      * GET /api/fill/download/{taskId}
      */
     @GetMapping("/download/{taskId}")
-    public ResponseEntity<Resource> downloadResult(@PathVariable Long taskId) {
+    public void downloadResult(@PathVariable Long taskId, HttpServletResponse response) {
         log.info("下载填表结果, taskId={}", taskId);
         FillTaskVO task = fillService.getTask(taskId).getData();
         if (task == null || !TaskStatus.SUCCESS.name().equals(task.getStatus()) || task.getResultFilePath() == null) {
             log.warn("下载失败：任务未成功或无结果文件, taskId={}, status={}, resultFilePath={}",
                     taskId, task == null ? null : task.getStatus(), task == null ? null : task.getResultFilePath());
-            return ResponseEntity.notFound().build();
+            response.setStatus(404);
+            return;
         }
         Path resultsDir = Paths.get(uploadProperties.getResultsDir());
         Path normalizedResultsDir = resultsDir.normalize();
@@ -96,28 +126,157 @@ public class FillController {
         if (!filePath.startsWith(normalizedResultsDir)) {
             log.warn("下载失败：结果文件落点不在结果目录内, taskId={}, path={}",
                     taskId, filePath);
-            return ResponseEntity.notFound().build();
+            response.setStatus(404);
+            return;
         }
         try {
             Resource resource = new UrlResource(filePath.toUri());
             if (!resource.exists() || !resource.isReadable()) {
                 log.warn("下载失败：文件不存在或不可读, taskId={}, path={}", taskId, filePath);
-                return ResponseEntity.notFound().build();
+                response.setStatus(404);
+                return;
             }
-            String contentType = "application/octet-stream";
-            String filename = task.getResultFilePath();
+            String resultFilePath = task.getResultFilePath();
+            String filename = resultFilePath;
             // 兼容 '/' 和 '\'
             int lastSlash = filename.lastIndexOf('/');
             int lastBackslash = filename.lastIndexOf('\\');
             int idx = Math.max(lastSlash, lastBackslash);
             if (idx >= 0) filename = filename.substring(idx + 1);
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(contentType))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                    .body(resource);
+
+            // 按文件扩展名返回更准确的 Content-Type，提升 Apifox“保存为文件”的扩展名识别成功率。
+            // 同时仍是下载 attachment，避免被当文本预览。
+            String contentType = resolveContentTypeByFilename(resultFilePath);
+
+            // 优先使用用户上传时的模板名/文档集名构造下载名；同时保留 ASCII 兜底名兼容部分客户端。
+            String preferredFilename = buildPreferredFilename(task, filename);
+            String asciiFilename = buildAsciiFilename(taskId, filename);
+            String encodedPreferred = URLEncoder.encode(preferredFilename, StandardCharsets.UTF_8)
+                    .replace("+", "%20");
+            String simpleContentDisposition = "attachment; filename=\"" + asciiFilename + "\"; " +
+                    "filename*=UTF-8''" + encodedPreferred;
+            response.setStatus(200);
+            response.setContentType(contentType);
+            response.setHeader(HttpHeaders.CONTENT_DISPOSITION, simpleContentDisposition);
+
+            long contentLength = resource.contentLength();
+            if (contentLength >= 0) {
+                response.setContentLengthLong(contentLength);
+            }
+
+            try (InputStream in = resource.getInputStream();
+                 OutputStream out = response.getOutputStream()) {
+                in.transferTo(out);
+                out.flush();
+            }
         } catch (Exception e) {
             log.error("下载失败：异常, taskId={}", taskId, e);
-            return ResponseEntity.notFound().build();
+            response.setStatus(404);
         }
     }
+
+    private static String resolveContentTypeByFilename(String filename) {
+        if (filename == null) {
+            return "application/octet-stream";
+        }
+        String lower = filename.toLowerCase();
+        if (lower.endsWith(".xlsx")) {
+            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        }
+        if (lower.endsWith(".xls")) {
+            return "application/vnd.ms-excel";
+        }
+        if (lower.endsWith(".docx")) {
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        }
+        if (lower.endsWith(".doc")) {
+            return "application/msword";
+        }
+        if (lower.endsWith(".json")) {
+            return "application/json; charset=utf-8";
+        }
+        return "application/octet-stream";
+    }
+
+    private static String buildAsciiFilename(Long taskId, String rawFilename) {
+        String name = rawFilename == null ? "" : rawFilename;
+        // 提取扩展名（包含点），没有就用 .bin
+        String lower = name.toLowerCase();
+        int dot = lower.lastIndexOf('.');
+        String ext = dot >= 0 ? name.substring(dot) : ".bin";
+        // 强制扩展名合法字符集
+        ext = ext.replaceAll("[^a-zA-Z0-9\\.]", "");
+        if (ext.isBlank()) {
+            ext = ".bin";
+        }
+        return "fill_" + taskId + ext;
+    }
+
+    private String buildPreferredFilename(FillTaskVO task, String fallbackFilename) {
+        String ext = extractExtensionOrBin(fallbackFilename);
+        String docSetName = null;
+        String templateName = null;
+        if (task.getDocumentSetId() != null) {
+            DocumentSet set = documentSetMapper.selectById(task.getDocumentSetId());
+            if (set != null) {
+                docSetName = set.getName();
+            }
+        }
+        if (task.getTemplateId() != null) {
+            Template template = templateMapper.selectById(task.getTemplateId());
+            if (template != null) {
+                templateName = stripExtension(template.getFileName());
+            }
+        }
+        String base;
+        if (templateName != null && !templateName.isBlank()) {
+            base = sanitizeFilenamePart(templateName);
+            if (docSetName != null && !docSetName.isBlank()) {
+                base = base + "_" + sanitizeFilenamePart(docSetName);
+            }
+        } else if (docSetName != null && !docSetName.isBlank()) {
+            base = "填表结果_" + sanitizeFilenamePart(docSetName);
+        } else {
+            base = "填表结果";
+        }
+        if (base.isBlank()) {
+            base = "fill_result";
+        }
+        return base + ext;
+    }
+
+    private static String extractExtensionOrBin(String filename) {
+        if (filename == null) {
+            return ".bin";
+        }
+        int dot = filename.lastIndexOf('.');
+        if (dot < 0 || dot == filename.length() - 1) {
+            return ".bin";
+        }
+        String ext = filename.substring(dot);
+        ext = ext.replaceAll("[^a-zA-Z0-9\\.]", "");
+        return ext.isBlank() ? ".bin" : ext;
+    }
+
+    private static String stripExtension(String filename) {
+        if (filename == null) {
+            return null;
+        }
+        int dot = filename.lastIndexOf('.');
+        if (dot <= 0) {
+            return filename;
+        }
+        return filename.substring(0, dot);
+    }
+
+    private static String sanitizeFilenamePart(String input) {
+        if (input == null) {
+            return "";
+        }
+        String value = input.trim()
+                .replaceAll("[\\\\/:*?\"<>|]+", "_")
+                .replaceAll("\\s+", " ");
+        return value.length() > 80 ? value.substring(0, 80) : value;
+    }
+
 }

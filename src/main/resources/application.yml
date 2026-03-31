@@ -68,6 +68,26 @@ ai:
     read-timeout-ms: 90000
     max-attempts: 3
     retry-interval-ms: 800
+  fill:
+    create-path: /api/tasks/create
+    status-path: /api/tasks/%s
+    download-path: /api/tasks/%s/download/%s
+    poll-interval-ms: 1000
+    # 轮询超时（ms）：测试阶段先放宽到 10 分钟
+    poll-timeout-ms: 600000
+    # 自由模式也走同一任务流，A23 接口要求 template 必填，这里配置默认模板（相对 templatesDir 或绝对路径）
+    free-template-path:
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
 
 logging:
   level:
@@ -81,5 +101,21 @@ rabbitmq:
   port: ${doc.rabbitmq.port}
   username: ${doc.rabbitmq.username}
   password: ${doc.rabbitmq.password}
+
+# 填表任务消费策略
+fill:
+  task:
+    # RUNNING 超时恢复阈值（分钟）：超时后允许自动恢复重跑
+    running-timeout-minutes: 10
+    # Redis 分布式任务锁 TTL（秒）：防止同一 taskId 被并发消费
+    lock-ttl-seconds: 1800
+    recovery:
+      enabled: true
+      # 服务启动后立即执行一次恢复扫描
+      startup-run: true
+      # 每批最多恢复条数
+      batch-size: 200
+      # 定时补偿：每 5 分钟扫描一次超时 RUNNING
+      cron: "0 */5 * * * ?"
 
 

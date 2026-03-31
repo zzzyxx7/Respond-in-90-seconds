@@ -34,4 +34,36 @@ public interface FillTaskMapper {
      */
     int markResultExpired(@Param("id") Long id,
                           @Param("message") String message);
+
+    /**
+     * 重跑前重置任务状态与结果字段。
+     */
+    int resetForRerun(@Param("id") Long id,
+                      @Param("fromStatus1") String fromStatus1,
+                      @Param("fromStatus2") String fromStatus2,
+                      @Param("toStatus") String toStatus,
+                      @Param("message") String message);
+
+    /**
+     * 按状态条件取消任务（用于并发下安全取消）。
+     */
+    int cancelIfStatusIn(@Param("id") Long id,
+                         @Param("status1") String status1,
+                         @Param("status2") String status2,
+                         @Param("cancelledStatus") String cancelledStatus,
+                         @Param("message") String message,
+                         @Param("finishedAt") LocalDateTime finishedAt);
+
+    /**
+     * 扫描超时 RUNNING 任务（用于恢复补偿）。
+     */
+    List<FillTask> selectRunningTimeoutTasks(@Param("cutoff") LocalDateTime cutoff,
+                                             @Param("limit") Integer limit);
+
+    /**
+     * 将 RUNNING 任务原子标记为 TIMEOUT（并发安全）。
+     */
+    int markRunningTimeout(@Param("id") Long id,
+                           @Param("timeoutStatus") String timeoutStatus,
+                           @Param("message") String message);
 }

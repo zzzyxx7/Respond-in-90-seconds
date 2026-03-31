@@ -5,6 +5,7 @@ import com.fusion.docfusion.dto.TemplateProfileVO;
 import com.fusion.docfusion.entity.Template;
 import com.fusion.docfusion.entity.TemplateProfile;
 import com.fusion.docfusion.exception.BusinessException;
+import com.fusion.docfusion.exception.ErrorCode;
 import com.fusion.docfusion.mapper.TemplateMapper;
 import com.fusion.docfusion.mapper.TemplateProfileMapper;
 import com.fusion.docfusion.service.TemplateProfileService;
@@ -25,15 +26,15 @@ public class TemplateProfileServiceImpl implements TemplateProfileService {
     @Override
     public Result<TemplateProfileVO> saveOrUpdate(TemplateProfileVO vo) {
         if (vo == null || vo.getTemplateId() == null) {
-            throw new BusinessException("模板ID不能为空");
+            throw new BusinessException(ErrorCode.TEMPLATE_PROFILE_ID_REQUIRED);
         }
         if (vo.getContent() == null || vo.getContent().isBlank()) {
-            throw new BusinessException("模板档案内容不能为空");
+            throw new BusinessException(ErrorCode.TEMPLATE_PROFILE_CONTENT_EMPTY);
         }
 
         Template template = templateMapper.selectById(vo.getTemplateId());
         if (template == null) {
-            throw new BusinessException("模板不存在");
+            throw new BusinessException(ErrorCode.TEMPLATE_NOT_FOUND);
         }
 
         TemplateProfile existing = templateProfileMapper.selectByTemplateId(vo.getTemplateId());
@@ -57,7 +58,7 @@ public class TemplateProfileServiceImpl implements TemplateProfileService {
     @Override
     public Result<TemplateProfileVO> getByTemplateId(Long templateId) {
         if (templateId == null) {
-            throw new BusinessException("模板ID不能为空");
+            throw new BusinessException(ErrorCode.TEMPLATE_PROFILE_ID_REQUIRED);
         }
         TemplateProfile profile = templateProfileMapper.selectByTemplateId(templateId);
         if (profile == null) {

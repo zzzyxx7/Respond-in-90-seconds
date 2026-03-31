@@ -13,6 +13,7 @@ import com.fusion.docfusion.entity.DocumentSet;
 import com.fusion.docfusion.entity.FillTask;
 import com.fusion.docfusion.entity.Template;
 import com.fusion.docfusion.exception.BusinessException;
+import com.fusion.docfusion.exception.ErrorCode;
 import com.fusion.docfusion.mapper.DocumentMapper;
 import com.fusion.docfusion.mapper.DocumentSetMapper;
 import com.fusion.docfusion.mapper.FillTaskMapper;
@@ -30,6 +31,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -60,29 +62,29 @@ public class FillServiceImpl implements FillService {
 
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
-            throw new BusinessException("请先登录再提交填表任务");
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录再提交填表任务");
         }
 
         // rate limit：限制提交频率，防止滥用
         String rateKey = "fill:submitFill:" + currentUserId;
         if (!rateLimiter.tryAcquire(rateKey, MAX_SUBMISSIONS_PER_MINUTE, RATE_LIMIT_WINDOW_MILLIS)) {
-            throw new BusinessException(429, "提交操作过于频繁，请在 1 分钟后再试");
+            throw new BusinessException(ErrorCode.FILL_RATE_LIMITED);
         }
 
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
-            throw new BusinessException("文档集不存在");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
         }
         if (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId())) {
-            throw new BusinessException("无权使用该文档集");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_FORBIDDEN);
         }
         Template template = templateMapper.selectById(templateId);
         if (template == null) {
-            throw new BusinessException("模板不存在");
+            throw new BusinessException(ErrorCode.TEMPLATE_NOT_FOUND);
         }
         List<Document> docs = documentMapper.selectByDocumentSetId(documentSetId);
         if (docs.isEmpty()) {
-            throw new BusinessException("文档集中没有文档");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_EMPTY_DOCS);
         }
 
         FillTask task = new FillTask();
@@ -105,13 +107,72 @@ public class FillServiceImpl implements FillService {
     public Result<FillTaskVO> getTask(Long taskId) {
         FillTask task = fillTaskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException("任务不存在");
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND);
         }
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (task.getUserId() != null && !currentUserId.equals(task.getUserId()))) {
-            throw new BusinessException("无权访问该任务");
+            throw new BusinessException(ErrorCode.TASK_FORBIDDEN);
         }
         return Result.success(toVO(task, true));
+    }
+
+    @Override
+    public Result<FillTaskVO> rerunTask(Long taskId) {
+        FillTask task = fillTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND);
+        }
+        Long currentUserId = SecurityUtils.currentUserId();
+        if (currentUserId == null || (task.getUserId() != null && !currentUserId.equals(task.getUserId()))) {
+            throw new BusinessException(ErrorCode.TASK_OPERATION_FORBIDDEN);
+        }
+        int changed = fillTaskMapper.resetForRerun(
+                taskId,
+                TaskStatus.FAILED.name(),
+                TaskStatus.TIMEOUT.name(),
+                TaskStatus.PENDING.name(),
+                "人工触发重跑，等待重新处理"
+        );
+        FillTask latest = fillTaskMapper.selectById(taskId);
+        if (changed <= 0) {
+            String latestStatus = latest == null ? null : latest.getStatus();
+            if (TaskStatus.PENDING.name().equalsIgnoreCase(latestStatus)
+                    || TaskStatus.RUNNING.name().equalsIgnoreCase(latestStatus)) {
+                return Result.success(toVO(latest, true));
+            }
+            throw new BusinessException(ErrorCode.TASK_RERUN_NOT_ALLOWED);
+        }
+        amqpTemplate.convertAndSend(RabbitConfig.FILL_TASK_EXCHANGE, RabbitConfig.FILL_TASK_ROUTING_KEY, taskId);
+        return Result.success(toVO(latest, true));
+    }
+
+    @Override
+    public Result<FillTaskVO> cancelTask(Long taskId) {
+        FillTask task = fillTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND);
+        }
+        Long currentUserId = SecurityUtils.currentUserId();
+        if (currentUserId == null || (task.getUserId() != null && !currentUserId.equals(task.getUserId()))) {
+            throw new BusinessException(ErrorCode.TASK_OPERATION_FORBIDDEN);
+        }
+        int changed = fillTaskMapper.cancelIfStatusIn(
+                taskId,
+                TaskStatus.PENDING.name(),
+                TaskStatus.RUNNING.name(),
+                TaskStatus.CANCELLED.name(),
+                "用户主动取消任务",
+                LocalDateTime.now()
+        );
+        FillTask latest = fillTaskMapper.selectById(taskId);
+        if (changed <= 0) {
+            String latestStatus = latest == null ? null : latest.getStatus();
+            if (TaskStatus.CANCELLED.name().equalsIgnoreCase(latestStatus)) {
+                return Result.success(toVO(latest, true));
+            }
+            throw new BusinessException(ErrorCode.TASK_CANCEL_NOT_ALLOWED);
+        }
+        return Result.success(toVO(latest, true));
     }
 
     @Override
@@ -120,24 +181,24 @@ public class FillServiceImpl implements FillService {
 
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
-            throw new BusinessException("请先登录再提交填表任务");
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录再提交填表任务");
         }
 
         String rateKey = "fill:submitFree:" + currentUserId;
         if (!rateLimiter.tryAcquire(rateKey, MAX_SUBMISSIONS_PER_MINUTE, RATE_LIMIT_WINDOW_MILLIS)) {
-            throw new BusinessException(429, "提交操作过于频繁，请在 1 分钟后再试");
+            throw new BusinessException(ErrorCode.FILL_RATE_LIMITED);
         }
 
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
-            throw new BusinessException("文档集不存在");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
         }
         if (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId())) {
-            throw new BusinessException("无权使用该文档集");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_FORBIDDEN);
         }
         List<Document> docs = documentMapper.selectByDocumentSetId(documentSetId);
         if (docs.isEmpty()) {
-            throw new BusinessException("文档集中没有文档");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_EMPTY_DOCS);
         }
 
         FillTask task = new FillTask();
@@ -160,7 +221,7 @@ public class FillServiceImpl implements FillService {
     public Result<FillTaskListPageVO> listTasks(String mode, String status, Integer page, Integer size) {
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
-            throw new BusinessException("请先登录查看历史任务");
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录查看历史任务");
         }
         int pageNum = (page == null || page < 1) ? 1 : page;
         int pageSize = (size == null || size < 1 || size > 100) ? 20 : size;
@@ -195,12 +256,97 @@ public class FillServiceImpl implements FillService {
         vo.setErrorMessage(task.getErrorMessage());
 
         vo.setTotalDurationMs(calcTotalDurationMs(task.getCreatedAt(), task.getFinishedAt()));
+        List<FillTaskStep> steps = null;
         if (includeSteps) {
-            List<FillTaskStep> steps = fillTaskStepMapper.selectByTaskId(task.getId());
+            steps = fillTaskStepMapper.selectByTaskId(task.getId());
             List<FillTaskStepVO> stepVOs = steps.stream().map(FillServiceImpl::toStepVO).toList();
             vo.setSteps(stepVOs);
         }
+        fillStateAndFailureHints(vo, task, steps);
         return vo;
+    }
+
+    private static void fillStateAndFailureHints(FillTaskVO vo, FillTask task, List<FillTaskStep> steps) {
+        if (task == null || vo == null) {
+            return;
+        }
+        String status = task.getStatus();
+        List<String> allowed = new ArrayList<>();
+        if (TaskStatus.SUCCESS.name().equalsIgnoreCase(status)) {
+            allowed.add("DOWNLOAD");
+        }
+        if (TaskStatus.PENDING.name().equalsIgnoreCase(status) || TaskStatus.RUNNING.name().equalsIgnoreCase(status)) {
+            allowed.add("CANCEL");
+        }
+        if (TaskStatus.FAILED.name().equalsIgnoreCase(status) || TaskStatus.TIMEOUT.name().equalsIgnoreCase(status)) {
+            allowed.add("MANUAL_RERUN");
+        }
+        vo.setAllowedActions(allowed);
+
+        if (!(TaskStatus.FAILED.name().equalsIgnoreCase(status) || TaskStatus.TIMEOUT.name().equalsIgnoreCase(status))) {
+            return;
+        }
+        vo.setFailureReasonCode(resolveFailureReasonCode(task));
+        vo.setFailureSuggestion(buildFailureSuggestion(status, vo.getFailureReasonCode()));
+        FillTaskStep failedStep = findLastFailedStep(steps);
+        if (failedStep != null) {
+            vo.setFailureStage(failedStep.getStepCode());
+            if (vo.getErrorMessage() == null || vo.getErrorMessage().isBlank()) {
+                vo.setErrorMessage(failedStep.getErrorMessage());
+            }
+        } else {
+            vo.setFailureStage("TASK");
+        }
+    }
+
+    private static FillTaskStep findLastFailedStep(List<FillTaskStep> steps) {
+        if (steps == null || steps.isEmpty()) {
+            return null;
+        }
+        for (int i = steps.size() - 1; i >= 0; i--) {
+            FillTaskStep s = steps.get(i);
+            if (s != null && "FAILED".equalsIgnoreCase(s.getStatus())) {
+                return s;
+            }
+        }
+        return null;
+    }
+
+    private static String resolveFailureReasonCode(FillTask task) {
+        if (task == null) {
+            return "UNKNOWN";
+        }
+        if (TaskStatus.TIMEOUT.name().equalsIgnoreCase(task.getStatus())) {
+            return "TIMEOUT";
+        }
+        String msg = task.getErrorMessage();
+        if (msg == null) {
+            return "UNKNOWN";
+        }
+        String lower = msg.toLowerCase();
+        if (lower.contains("timeout") || lower.contains("超时")) {
+            return "TIMEOUT";
+        }
+        if (lower.contains("process exit code")) {
+            return "AI_PROCESS_EXIT";
+        }
+        if (lower.contains("connect") || lower.contains("refused") || lower.contains("io")) {
+            return "AI_NETWORK";
+        }
+        return "UNKNOWN";
+    }
+
+    private static String buildFailureSuggestion(String status, String reasonCode) {
+        if (TaskStatus.TIMEOUT.name().equalsIgnoreCase(status) || "TIMEOUT".equalsIgnoreCase(reasonCode)) {
+            return "任务超时，建议检查 AI 服务负载或日志后执行人工重跑。";
+        }
+        if ("AI_PROCESS_EXIT".equalsIgnoreCase(reasonCode)) {
+            return "AI 进程异常退出，建议先修复 AI 侧报错后再重跑。";
+        }
+        if ("AI_NETWORK".equalsIgnoreCase(reasonCode)) {
+            return "AI 网络调用失败，建议确认 AI 服务地址与连通性。";
+        }
+        return "建议查看任务步骤错误信息后执行人工重跑。";
     }
 
     private static FillTaskStepVO toStepVO(FillTaskStep step) {

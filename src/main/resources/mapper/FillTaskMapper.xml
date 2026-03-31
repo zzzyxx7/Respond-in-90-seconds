@@ -16,14 +16,15 @@
         <result property="createdAt" column="created_at"/>
         <result property="finishedAt" column="finished_at"/>
         <result property="errorMessage" column="error_message"/>
+        <result property="version" column="version"/>
     </resultMap>
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.FillTask"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO fill_task (user_id, document_set_id, template_id, mode, user_requirement, status, result_file_path,
-                               created_at, finished_at, error_message)
+                               created_at, finished_at, error_message, version)
         VALUES (#{userId}, #{documentSetId}, #{templateId}, #{mode}, #{userRequirement}, #{status}, #{resultFilePath},
-                #{createdAt}, #{finishedAt}, #{errorMessage})
+                #{createdAt}, #{finishedAt}, #{errorMessage}, 0)
     </insert>
 
     <update id="updateById" parameterType="com.fusion.docfusion.entity.FillTask">
@@ -33,8 +34,12 @@
             <if test="resultFilePath != null">result_file_path = #{resultFilePath},</if>
             <if test="finishedAt != null">finished_at = #{finishedAt},</if>
             <if test="errorMessage != null">error_message = #{errorMessage},</if>
+            version = version + 1,
         </set>
         WHERE id = #{id}
+        <if test="version != null">
+            AND version = #{version}
+        </if>
     </update>
 
     <select id="selectById" resultMap="FillTaskResultMap">
@@ -99,7 +104,50 @@
     <update id="markResultExpired">
         UPDATE fill_task
         SET result_file_path = NULL,
-            error_message = #{message}
+            error_message = #{message},
+            version = version + 1
         WHERE id = #{id}
+    </update>
+
+    <update id="resetForRerun">
+        UPDATE fill_task
+        SET status = #{toStatus},
+            finished_at = NULL,
+            result_file_path = NULL,
+            error_message = #{message},
+            version = version + 1
+        WHERE id = #{id}
+          AND status IN (#{fromStatus1}, #{fromStatus2})
+    </update>
+
+    <update id="cancelIfStatusIn">
+        UPDATE fill_task
+        SET status = #{cancelledStatus},
+            finished_at = #{finishedAt},
+            error_message = #{message},
+            version = version + 1
+        WHERE id = #{id}
+          AND status IN (#{status1}, #{status2})
+    </update>
+
+    <select id="selectRunningTimeoutTasks" resultMap="FillTaskResultMap">
+        SELECT *
+        FROM fill_task
+        WHERE status = 'RUNNING'
+          AND created_at IS NOT NULL
+          AND created_at &lt; #{cutoff}
+        ORDER BY created_at ASC
+        <if test="limit != null and limit &gt; 0">
+            LIMIT #{limit}
+        </if>
+    </select>
+
+    <update id="markRunningTimeout">
+        UPDATE fill_task
+        SET status = #{timeoutStatus},
+            error_message = #{message},
+            version = version + 1
+        WHERE id = #{id}
+          AND status = 'RUNNING'
     </update>
 </mapper>

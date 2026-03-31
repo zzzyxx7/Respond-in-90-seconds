@@ -8,6 +8,7 @@ import com.fusion.docfusion.dto.DocumentVO;
 import com.fusion.docfusion.entity.Document;
 import com.fusion.docfusion.entity.DocumentSet;
 import com.fusion.docfusion.exception.BusinessException;
+import com.fusion.docfusion.exception.ErrorCode;
 import com.fusion.docfusion.mapper.DocumentMapper;
 import com.fusion.docfusion.mapper.DocumentSetMapper;
 import com.fusion.docfusion.security.SecurityUtils;
@@ -49,10 +50,10 @@ public class DocumentServiceImpl implements DocumentService {
     public Result<DocumentSetVO> uploadDocuments(List<MultipartFile> files) {
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
-            throw new BusinessException("请先登录再上传文档");
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录再上传文档");
         }
         if (files == null || files.isEmpty()) {
-            throw new BusinessException("请至少上传一个文档");
+            throw new BusinessException(ErrorCode.DOC_UPLOAD_EMPTY);
         }
 
         long totalSize = 0L;
@@ -64,21 +65,21 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
         if (totalSize > MAX_TOTAL_UPLOAD_BYTES) {
-            throw new BusinessException(400, "单次上传文件总大小过大，请控制在 100MB 以内");
+            throw new BusinessException(ErrorCode.DOC_UPLOAD_TOO_LARGE);
         }
 
         Path basePath = Paths.get(uploadProperties.getDocsDir());
         try {
             Files.createDirectories(basePath);
         } catch (IOException e) {
-            throw new BusinessException("创建上传目录失败: " + e.getMessage());
+            throw new BusinessException(ErrorCode.DOC_UPLOAD_DIR_FAIL, "创建上传目录失败: " + e.getMessage());
         }
         String dirName = "set_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8);
         Path setPath = basePath.resolve(dirName);
         try {
             Files.createDirectories(setPath);
         } catch (IOException e) {
-            throw new BusinessException("创建文档集目录失败: " + e.getMessage());
+            throw new BusinessException(ErrorCode.DOC_SET_DIR_FAIL, "创建文档集目录失败: " + e.getMessage());
         }
 
         DocumentSet set = new DocumentSet();
@@ -105,13 +106,13 @@ public class DocumentServiceImpl implements DocumentService {
             Path normalizedSetPath = setPath.normalize();
             Path target = setPath.resolve(savedName).normalize();
             if (!target.startsWith(normalizedSetPath)) {
-                throw new BusinessException(400, "非法文件名或路径");
+                throw new BusinessException(ErrorCode.DOC_INVALID_PATH);
             }
 
             try {
                 file.transferTo(target.toFile());
             } catch (IOException e) {
-                throw new BusinessException("保存文件失败: " + safeFilename + ", " + e.getMessage());
+                throw new BusinessException(ErrorCode.DOC_SAVE_FAILED, "保存文件失败: " + safeFilename + ", " + e.getMessage());
             }
             Document doc = new Document();
             doc.setDocumentSetId(documentSetId);
@@ -131,7 +132,7 @@ public class DocumentServiceImpl implements DocumentService {
             docList.add(vo);
         }
         if (docList.isEmpty()) {
-            throw new BusinessException("没有可保存的文档，请上传支持的类型（docx、md、xlsx、txt、pdf）");
+            throw new BusinessException(ErrorCode.DOC_NO_VALID_FILES);
         }
 
         DocumentSetVO setVO = new DocumentSetVO();
@@ -146,7 +147,7 @@ public class DocumentServiceImpl implements DocumentService {
     public Result<List<DocumentSetListItemVO>> listDocumentSets() {
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
-            throw new BusinessException("请先登录查看文档集列表");
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录查看文档集列表");
         }
         List<DocumentSetListItemVO> list = documentSetMapper.selectAllForList(currentUserId);
         return Result.success(list);
@@ -157,11 +158,11 @@ public class DocumentServiceImpl implements DocumentService {
     public Result<Boolean> deleteDocumentSet(Long documentSetId) {
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
-            throw new BusinessException("文档集不存在");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
         }
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId()))) {
-            throw new BusinessException("无权删除该文档集");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_DELETE_FORBIDDEN);
         }
         int rows = documentSetMapper.deleteById(documentSetId);
         return Result.success(rows > 0);
@@ -171,11 +172,11 @@ public class DocumentServiceImpl implements DocumentService {
     public Result<DocumentSetVO> getDocumentSet(Long documentSetId) {
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
-            throw new BusinessException("文档集不存在");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
         }
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId()))) {
-            throw new BusinessException("无权查看该文档集");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_VIEW_FORBIDDEN);
         }
         List<Document> docs = documentMapper.selectByDocumentSetId(documentSetId);
         List<DocumentVO> list = docs.stream().map(d -> {

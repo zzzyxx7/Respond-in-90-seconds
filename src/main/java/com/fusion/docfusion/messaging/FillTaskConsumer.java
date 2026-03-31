@@ -1,7 +1,6 @@
 package com.fusion.docfusion.messaging;
 
 import com.fusion.docfusion.config.RabbitConfig;
-import com.fusion.docfusion.config.UploadProperties;
 import com.fusion.docfusion.entity.Document;
 import com.fusion.docfusion.entity.DocumentSet;
 import com.fusion.docfusion.entity.FillTask;
@@ -10,14 +9,17 @@ import com.fusion.docfusion.entity.Template;
 import com.fusion.docfusion.enums.TaskMode;
 import com.fusion.docfusion.enums.TaskStatus;
 import com.fusion.docfusion.exception.BusinessException;
+import com.fusion.docfusion.exception.ErrorCode;
 import com.fusion.docfusion.mapper.DocumentMapper;
 import com.fusion.docfusion.mapper.DocumentSetMapper;
 import com.fusion.docfusion.mapper.FillTaskMapper;
 import com.fusion.docfusion.mapper.FillTaskStepMapper;
 import com.fusion.docfusion.mapper.TemplateMapper;
-import com.fusion.docfusion.service.ExtractionService;
+import com.fusion.docfusion.service.AiFillService;
+import com.fusion.docfusion.util.RedisDistributedLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.amqp.core.AmqpTemplate;
@@ -26,19 +28,13 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
-/**
- * 异步处理填表任务（当前仍为占位实现：复制模板/生成简单 Excel）。
- * 后续接入 AI 时，只需要在这里接入 RAG + 抽取 + 填表逻辑。
- */
+/** 异步处理填表任务：调用 AI 任务流并记录步骤链路。 */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -59,15 +55,22 @@ public class FillTaskConsumer {
      * 超过最大次数后，消息将被投递到 DLQ（parking lot）并 ACK，避免无限循环。
      */
     private static final int MAX_RETRY_ATTEMPTS = 5;
+    /**
+     * 任务长时间处于 RUNNING 时视为卡死，允许恢复重跑（分钟）。
+     */
+    @Value("${fill.task.running-timeout-minutes:10}")
+    private int runningTimeoutMinutes;
+    @Value("${fill.task.lock-ttl-seconds:1800}")
+    private long lockTtlSeconds;
 
-    private final UploadProperties uploadProperties;
     private final DocumentSetMapper documentSetMapper;
     private final DocumentMapper documentMapper;
     private final TemplateMapper templateMapper;
     private final FillTaskMapper fillTaskMapper;
     private final FillTaskStepMapper fillTaskStepMapper;
-    private final ExtractionService extractionService;
+    private final AiFillService aiFillService;
     private final AmqpTemplate amqpTemplate;
+    private final RedisDistributedLock distributedLock;
 
     @RabbitListener(queues = RabbitConfig.FILL_TASK_QUEUE)
     public void handleFillTask(
@@ -76,7 +79,16 @@ public class FillTaskConsumer {
             @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag,
             @Header(value = "x-death", required = false) List<Map<String, Object>> xDeath
     ) throws IOException {
-        log.info("异步处理填表任务, taskId={}", taskId);
+        String lockKey = "fill:task:lock:" + taskId;
+        String lockToken = distributedLock.tryLock(lockKey, Duration.ofSeconds(lockTtlSeconds));
+        if (lockToken == null) {
+            log.warn("任务锁已被占用，跳过本次消费, taskId={}", taskId);
+            channel.basicAck(deliveryTag, false);
+            return;
+        }
+        int attempts = extractAttemptsFromXDeath(xDeath, RabbitConfig.FILL_TASK_QUEUE);
+        log.info("异步处理填表任务, taskId={}, deliveryTag={}, attempts={}",
+                taskId, deliveryTag, attempts);
         try {
             FillTask task = fillTaskMapper.selectById(taskId);
             if (task == null) {
@@ -91,21 +103,59 @@ public class FillTaskConsumer {
                 channel.basicAck(deliveryTag, false);
                 return;
             }
+            if (TaskStatus.CANCELLED.name().equalsIgnoreCase(task.getStatus())) {
+                log.info("任务已取消，跳过消费, taskId={}", taskId);
+                channel.basicAck(deliveryTag, false);
+                return;
+            }
+
+            if (TaskStatus.RUNNING.name().equalsIgnoreCase(task.getStatus())) {
+                if (isRunningTimedOut(task)) {
+                    log.warn("检测到 RUNNING 超时，触发恢复重跑, taskId={}, createdAt={}, timeoutMinutes={}",
+                            taskId, task.getCreatedAt(), runningTimeoutMinutes);
+                    task.setStatus(TaskStatus.TIMEOUT.name());
+                    task.setErrorMessage("检测到任务 RUNNING 超时，已触发自动恢复重跑");
+                    int timeoutUpdated = fillTaskMapper.updateById(task);
+                    if (timeoutUpdated > 0) {
+                        task.setVersion(nextVersion(task.getVersion()));
+                    }
+                } else {
+                    // 重复投递保护：已有消费者正在处理，直接 ACK 跳过
+                    log.warn("重复投递保护：任务仍在 RUNNING 且未超时，跳过本次消费, taskId={}", taskId);
+                    channel.basicAck(deliveryTag, false);
+                    return;
+                }
+            }
 
             task.setStatus(TaskStatus.RUNNING.name());
-            fillTaskMapper.updateById(task);
+            int runningUpdated = fillTaskMapper.updateById(task);
+            if (runningUpdated <= 0) {
+                log.warn("任务状态更新冲突，跳过本次消费, taskId={}", taskId);
+                channel.basicAck(deliveryTag, false);
+                return;
+            }
+            task.setVersion(nextVersion(task.getVersion()));
 
             if (TaskMode.TEMPLATE.name().equalsIgnoreCase(task.getMode())) {
                 processTemplateTask(task);
             } else if (TaskMode.FREE.name().equalsIgnoreCase(task.getMode())) {
                 processFreeTask(task);
             } else {
-                throw new BusinessException("未知任务模式: " + task.getMode());
+                throw new BusinessException(ErrorCode.TASK_MODE_UNKNOWN, "未知任务模式: " + task.getMode());
             }
 
             task.setStatus(TaskStatus.SUCCESS.name());
             task.setFinishedAt(LocalDateTime.now());
-            fillTaskMapper.updateById(task);
+            FillTask latestTask = fillTaskMapper.selectById(taskId);
+            if (latestTask != null && TaskStatus.CANCELLED.name().equalsIgnoreCase(latestTask.getStatus())) {
+                log.info("任务处理中被用户取消，保持 CANCELLED, taskId={}", taskId);
+                channel.basicAck(deliveryTag, false);
+                return;
+            }
+            int successUpdated = fillTaskMapper.updateById(task);
+            if (successUpdated <= 0) {
+                log.warn("任务完成写回冲突，保持最新状态, taskId={}", taskId);
+            }
             channel.basicAck(deliveryTag, false);
         } catch (Exception e) {
             log.error("异步任务处理异常, taskId={}", taskId, e);
@@ -114,7 +164,7 @@ public class FillTaskConsumer {
             try {
                 FillTask task = fillTaskMapper.selectById(taskId);
                 if (task != null) {
-                    task.setStatus(TaskStatus.FAILED.name());
+                    task.setStatus(resolveFailedStatus(e).name());
                     task.setFinishedAt(LocalDateTime.now());
                     task.setErrorMessage(truncateErrorMessage(e));
                     fillTaskMapper.updateById(task);
@@ -123,7 +173,6 @@ public class FillTaskConsumer {
                 // ignore
             }
 
-            int attempts = extractAttemptsFromXDeath(xDeath, RabbitConfig.FILL_TASK_QUEUE);
             if (attempts >= MAX_RETRY_ATTEMPTS) {
                 // 超过最大重试次数：投递到 DLQ，ACK 掉当前消息，避免无限循环
                 log.error("消息超过最大重试次数，进入 DLQ, taskId={}, attempts={}", taskId, attempts);
@@ -137,6 +186,8 @@ public class FillTaskConsumer {
                 // 进入重试队列（通过 DLX 路由）
                 channel.basicNack(deliveryTag, false, false);
             }
+        } finally {
+            distributedLock.unlock(lockKey, lockToken);
         }
     }
 
@@ -171,6 +222,28 @@ public class FillTaskConsumer {
         return (int) total;
     }
 
+    private boolean isRunningTimedOut(FillTask task) {
+        if (task == null || task.getCreatedAt() == null) {
+            return false;
+        }
+        return LocalDateTime.now().isAfter(task.getCreatedAt().plusMinutes(runningTimeoutMinutes));
+    }
+
+    private static TaskStatus resolveFailedStatus(Throwable e) {
+        if (e == null || e.getMessage() == null) {
+            return TaskStatus.FAILED;
+        }
+        String lower = e.getMessage().toLowerCase();
+        if (lower.contains("timeout") || lower.contains("超时")) {
+            return TaskStatus.TIMEOUT;
+        }
+        return TaskStatus.FAILED;
+    }
+
+    private static Long nextVersion(Long v) {
+        return v == null ? 1L : v + 1;
+    }
+
     /** fill_task.error_message 列为 VARCHAR(512)，避免异常信息过长写入失败 */
     private static String truncateErrorMessage(Throwable e) {
         if (e == null) {
@@ -194,66 +267,39 @@ public class FillTaskConsumer {
 
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
-            throw new BusinessException("文档集不存在");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
         }
         Template template = templateMapper.selectById(templateId);
         if (template == null) {
-            throw new BusinessException("模板不存在");
+            throw new BusinessException(ErrorCode.TEMPLATE_NOT_FOUND);
         }
         List<Document> docs = documentMapper.selectByDocumentSetId(documentSetId);
         if (docs.isEmpty()) {
-            throw new BusinessException("文档集中没有文档");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_EMPTY_DOCS);
         }
 
-        // 先对文档集中的每个文档执行抽取，结果写入 extracted_value
-        String instruction = task.getUserRequirement();
-        LocalDateTime extractStart = LocalDateTime.now();
-        upsertStep(taskId, STEP_EXTRACT, "字段抽取", STEP_STATUS_RUNNING, extractStart, null,
-                "文档数: " + docs.size(), null);
+        // 模板模式改为完全交由 AI 任务流处理，后端不再本地抽取
+        upsertStep(taskId, STEP_EXTRACT, "字段抽取", STEP_STATUS_SKIPPED, null, null,
+                "已切换为 AI 端内置抽取", null);
+
+        // 真实填表：改为调用 AI 任务流接口（/api/tasks/create -> 轮询 -> download）
+        LocalDateTime fillStart = LocalDateTime.now();
+        upsertStep(taskId, STEP_FILL, "模板填表", STEP_STATUS_RUNNING, fillStart, null,
+                "调用 AI 填表任务流", null);
         try {
-            for (Document doc : docs) {
-                log.info("开始抽取文档, taskId={}, documentId={}", task.getId(), doc.getId());
-                extractionService.extractForDocument(doc.getId(), instruction);
-            }
-            LocalDateTime extractEnd = LocalDateTime.now();
-            upsertStep(taskId, STEP_EXTRACT, "字段抽取", STEP_STATUS_SUCCESS, extractStart, extractEnd,
-                    "文档数: " + docs.size(), null);
+            aiFillService.fillTemplateForTask(task, docs);
+            LocalDateTime fillEnd = LocalDateTime.now();
+            upsertStep(taskId, STEP_FILL, "模板填表", STEP_STATUS_SUCCESS, fillStart, fillEnd,
+                    "已完成 AI 填表", null);
+
+            // 结果文件已由 AiFillService 落盘，这里仅补一个“生成结果”步骤用于前端可视化
+            LocalDateTime genNow = LocalDateTime.now();
+            upsertStep(taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_SUCCESS, genNow, genNow,
+                    "输出: " + task.getResultFilePath(), null);
         } catch (Exception e) {
-            LocalDateTime extractEnd = LocalDateTime.now();
-            upsertStep(taskId, STEP_EXTRACT, "字段抽取", STEP_STATUS_FAILED, extractStart, extractEnd,
-                    "文档数: " + docs.size(), e.getMessage());
-            throw e;
-        }
-
-        // 填表：当前未接入 AI 填表，引擎侧仅保留步骤占位
-        upsertStep(taskId, STEP_FILL, "模板填表", STEP_STATUS_SKIPPED, null, null,
-                "当前未接入 AI 填表服务（暂以复制模板文件占位）", null);
-
-        Path templatesDir = Paths.get(uploadProperties.getTemplatesDir());
-        Path resultsDir = Paths.get(uploadProperties.getResultsDir());
-        Path templatePath = templatesDir.resolve(template.getFilePath());
-        if (!Files.exists(templatePath)) {
-            throw new BusinessException("模板文件不存在: " + template.getFileName());
-        }
-
-        LocalDateTime genStart = LocalDateTime.now();
-        upsertStep(taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_RUNNING, genStart, null,
-                "模板: " + template.getFileName(), null);
-        try {
-            Files.createDirectories(resultsDir);
-            String resultFileName = "fill_" + task.getId() + "_" + UUID.randomUUID().toString().substring(0, 8) + "_" + template.getFileName();
-            Path resultPath = resultsDir.resolve(resultFileName);
-            Files.copy(templatePath, resultPath);
-
-            task.setResultFilePath(resultFileName);
-
-            LocalDateTime genEnd = LocalDateTime.now();
-            upsertStep(taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_SUCCESS, genStart, genEnd,
-                    "输出: " + resultFileName, null);
-        } catch (Exception e) {
-            LocalDateTime genEnd = LocalDateTime.now();
-            upsertStep(taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_FAILED, genStart, genEnd,
-                    "模板: " + template.getFileName(), e.getMessage());
+            LocalDateTime fillEnd = LocalDateTime.now();
+            upsertStep(taskId, STEP_FILL, "模板填表", STEP_STATUS_FAILED, fillStart, fillEnd,
+                    "AI 填表失败", e.getMessage());
             throw e;
         }
     }
@@ -263,51 +309,32 @@ public class FillTaskConsumer {
         Long documentSetId = task.getDocumentSetId();
 
         upsertStep(taskId, STEP_RAG, "RAG 检索", STEP_STATUS_SKIPPED, null, null, "当前未接入 RAG", null);
-        upsertStep(taskId, STEP_EXTRACT, "字段抽取", STEP_STATUS_SKIPPED, null, null, "自由模式当前未接入抽取（仅生成汇总占位）", null);
-        upsertStep(taskId, STEP_FILL, "汇总生成", STEP_STATUS_SKIPPED, null, null, "自由模式未来将由 AI 生成汇总表", null);
+        upsertStep(taskId, STEP_EXTRACT, "字段抽取", STEP_STATUS_SKIPPED, null, null, "自由模式由 AI 内部处理抽取", null);
 
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
-            throw new BusinessException("文档集不存在");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
         }
         List<Document> docs = documentMapper.selectByDocumentSetId(documentSetId);
         if (docs.isEmpty()) {
-            throw new BusinessException("文档集中没有文档");
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_EMPTY_DOCS);
         }
 
-        Path resultsDir = Paths.get(uploadProperties.getResultsDir());
-        LocalDateTime genStart = LocalDateTime.now();
-        upsertStep(taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_RUNNING, genStart, null,
-                "文档数: " + docs.size(), null);
+        LocalDateTime fillStart = LocalDateTime.now();
+        upsertStep(taskId, STEP_FILL, "汇总生成", STEP_STATUS_RUNNING, fillStart, null,
+                "调用 AI 自由模式任务流, 文档数: " + docs.size(), null);
         try {
-            Files.createDirectories(resultsDir);
-
-            String resultFileName = "free_" + task.getId() + "_" + UUID.randomUUID().toString().substring(0, 8) + ".xlsx";
-            Path resultPath = resultsDir.resolve(resultFileName);
-
-            try (org.apache.poi.ss.usermodel.Workbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
-                org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("汇总");
-                int rowIdx = 0;
-                org.apache.poi.ss.usermodel.Row header = sheet.createRow(rowIdx++);
-                header.createCell(0).setCellValue("文件名");
-                for (Document doc : docs) {
-                    org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowIdx++);
-                    row.createCell(0).setCellValue(doc.getFileName());
-                }
-                try (java.io.OutputStream os = Files.newOutputStream(resultPath)) {
-                    workbook.write(os);
-                }
-            }
-
-            task.setResultFilePath(resultFileName);
-
-            LocalDateTime genEnd = LocalDateTime.now();
-            upsertStep(taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_SUCCESS, genStart, genEnd,
-                    "输出: " + resultFileName, null);
+            aiFillService.fillFreeForTask(task, docs);
+            LocalDateTime fillEnd = LocalDateTime.now();
+            upsertStep(taskId, STEP_FILL, "汇总生成", STEP_STATUS_SUCCESS, fillStart, fillEnd,
+                    "已完成 AI 自由模式处理", null);
+            LocalDateTime genNow = LocalDateTime.now();
+            upsertStep(taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_SUCCESS, genNow, genNow,
+                    "输出: " + task.getResultFilePath(), null);
         } catch (Exception e) {
-            LocalDateTime genEnd = LocalDateTime.now();
-            upsertStep(taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_FAILED, genStart, genEnd,
-                    "文档数: " + docs.size(), e.getMessage());
+            LocalDateTime fillEnd = LocalDateTime.now();
+            upsertStep(taskId, STEP_FILL, "汇总生成", STEP_STATUS_FAILED, fillStart, fillEnd,
+                    "AI 自由模式处理失败", e.getMessage());
             throw e;
         }
     }

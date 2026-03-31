@@ -6,6 +6,7 @@ import com.fusion.docfusion.dto.LoginResponse;
 import com.fusion.docfusion.dto.RegisterRequest;
 import com.fusion.docfusion.entity.User;
 import com.fusion.docfusion.exception.BusinessException;
+import com.fusion.docfusion.exception.ErrorCode;
 import com.fusion.docfusion.mapper.UserMapper;
 import com.fusion.docfusion.service.AuthService;
 import com.fusion.docfusion.util.JwtUtil;
@@ -38,10 +39,10 @@ public class AuthServiceImpl implements AuthService {
     public Result<LoginResponse> login(LoginRequest request) {
         User user = userMapper.selectByUsername(request.getUsername());
         if (user == null) {
-            throw new BusinessException("用户名或密码错误");
+            throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
         }
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException("用户名或密码错误");
+            throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
         }
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
         LoginResponse resp = new LoginResponse();
@@ -56,21 +57,21 @@ public class AuthServiceImpl implements AuthService {
     public Result<LoginResponse> register(RegisterRequest request) {
         String username = request.getUsername() == null ? null : request.getUsername().trim();
         if (username == null || username.isBlank()) {
-            throw new BusinessException("用户名不能为空");
+            throw new BusinessException(ErrorCode.AUTH_USERNAME_EMPTY);
         }
         if (request.getPassword() == null || request.getPassword().isBlank()) {
-            throw new BusinessException("密码不能为空");
+            throw new BusinessException(ErrorCode.AUTH_PASSWORD_EMPTY);
         }
         if (username.length() < 3 || username.length() > 50) {
-            throw new BusinessException(400, "用户名长度应在 3~50 之间");
+            throw new BusinessException(ErrorCode.AUTH_USERNAME_LENGTH_INVALID);
         }
         if (request.getPassword().length() < 6 || request.getPassword().length() > 100) {
-            throw new BusinessException(400, "密码长度应在 6~100 之间");
+            throw new BusinessException(ErrorCode.AUTH_PASSWORD_LENGTH_INVALID);
         }
 
         User existed = userMapper.selectByUsername(username);
         if (existed != null) {
-            throw new BusinessException(400, "用户名已存在");
+            throw new BusinessException(ErrorCode.AUTH_USERNAME_EXISTS);
         }
 
         User u = new User();

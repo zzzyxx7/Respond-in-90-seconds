@@ -22,8 +22,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public Result<String> handleBusinessException(BusinessException e) {
-        log.warn("业务异常: {}", e.getMessage());
-        return Result.error(e.getCode(), e.getMessage());
+        log.warn("业务异常: errorCode={}, msg={}", e.getErrorCode(), e.getMessage());
+        Result<String> r = new Result<>();
+        r.setCode(e.getCode());
+        r.setErrorCode(e.getErrorCode());
+        r.setMessage(e.getMessage());
+        return r;
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -36,7 +40,7 @@ public class GlobalExceptionHandler {
             msg.append(err.getField()).append(": ").append(err.getDefaultMessage()).append("; ");
         }
         log.warn("参数校验异常: {}", msg);
-        return Result.error(400, msg.toString());
+        return Result.error(ErrorCode.PARAM_VALIDATION_ERROR, msg.toString());
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -47,27 +51,27 @@ public class GlobalExceptionHandler {
             msg = "请求体字段类型不匹配，请检查 ID/数字字段不要传对象或字符串";
         }
         log.warn("请求体解析异常: {}", e.getMessage());
-        return Result.error(400, msg);
+        return Result.error(ErrorCode.REQUEST_BODY_INVALID, msg);
     }
 
     @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<String> handleBadRequest(Exception e) {
         log.warn("请求参数异常: {}", e.getMessage());
-        return Result.error(400, "请求参数错误，请检查必填项与参数类型");
+        return Result.error(ErrorCode.BAD_REQUEST, "请求参数错误，请检查必填项与参数类型");
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public Result<String> handleAccessDenied(AccessDeniedException e) {
         log.warn("无权限访问: {}", e.getMessage());
-        return Result.error(403, "无权限访问该资源");
+        return Result.error(ErrorCode.FORBIDDEN, "无权限访问该资源");
     }
 
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<String> handleException(Exception e) {
         log.error("系统异常", e);
-        return Result.error(500, "系统繁忙，请稍后重试");
+        return Result.error(ErrorCode.INTERNAL_ERROR, "系统繁忙，请稍后重试");
     }
 }

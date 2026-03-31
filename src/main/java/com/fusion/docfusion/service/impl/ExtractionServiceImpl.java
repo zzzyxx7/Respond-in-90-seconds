@@ -6,6 +6,7 @@ import com.fusion.docfusion.entity.Document;
 import com.fusion.docfusion.entity.ExtractedValue;
 import com.fusion.docfusion.entity.FieldSchema;
 import com.fusion.docfusion.exception.BusinessException;
+import com.fusion.docfusion.exception.ErrorCode;
 import com.fusion.docfusion.mapper.DocumentMapper;
 import com.fusion.docfusion.mapper.ExtractedValueMapper;
 import com.fusion.docfusion.mapper.FieldSchemaMapper;
@@ -42,14 +43,14 @@ public class ExtractionServiceImpl implements ExtractionService {
     public void extractForDocument(Long documentId, String instruction) {
         Document document = documentMapper.selectById(documentId);
         if (document == null) {
-            throw new BusinessException("文档不存在");
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
         }
 
         Path docsDir = Paths.get(uploadProperties.getDocsDir());
         Path filePath = docsDir.resolve(document.getFilePath());
         File file = filePath.toFile();
         if (!file.exists()) {
-            throw new BusinessException("文档文件不存在: " + filePath);
+            throw new BusinessException(ErrorCode.DOCUMENT_FILE_MISSING, "文档文件不存在: " + filePath);
         }
 
         // 如果没有传入指令，使用一个默认指令

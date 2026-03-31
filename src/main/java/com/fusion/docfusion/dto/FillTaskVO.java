@@ -21,6 +21,14 @@ public class FillTaskVO {
     private LocalDateTime finishedAt;
     /** 任务失败时的错误信息 */
     private String errorMessage;
+    /** 更细粒度的失败阶段（例如 FILL / EXTRACT） */
+    private String failureStage;
+    /** 失败原因类型（例如 TIMEOUT / AI_PROCESS_EXIT） */
+    private String failureReasonCode;
+    /** 可读的失败建议（前端可直接展示） */
+    private String failureSuggestion;
+    /** 当前状态下允许的动作（如 MANUAL_RERUN / DOWNLOAD） */
+    private List<String> allowedActions;
 
     /**
      * 任务链路步骤列表（按执行顺序）。

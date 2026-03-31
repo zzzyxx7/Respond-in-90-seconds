@@ -25,17 +25,25 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
-                        // 登录公开
+                        // Actuator：健康检查供部署/探活（详情仍受 management.endpoint.health.show-details 控制）
+                        .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                        // swagger / openapi：本地联调与 Apifox 对照需要可访问
+                        .requestMatchers(
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/swagger-resources/**",
+                                "/webjars/**"
+                        ).permitAll()
+                        // 登录与认证相关接口本身公开
                         .requestMatchers("/api/auth/**").permitAll()
+                        // 核心业务接口对匿名用户也开放（提交填表、查询任务、下载结果等）
+                        .requestMatchers("/api/fill/**").permitAll()
+                        .requestMatchers("/api/documents/**").permitAll()
+                        .requestMatchers("/api/templates/**").permitAll()
+                        .requestMatchers("/api/report-types/**").permitAll()
                         // 开发调试接口仅管理员可访问
                         .requestMatchers("/api/dev/**").hasRole("ADMIN")
-                        // 只保留少量公开读取：报表类型（不涉及用户数据隔离）
-                        .requestMatchers("/api/report-types/**").permitAll()
-                        // 文档/模板/填表都属于用户隔离数据：要求登录
-                        .requestMatchers("/api/documents/**").authenticated()
-                        .requestMatchers("/api/templates/**").authenticated()
-                        // 提交/查询任务/下载结果都属于消耗或敏感数据：要求登录
-                        .requestMatchers("/api/fill/**").authenticated()
                         // 其他接口默认需要登录（目前基本没有）
                         .anyRequest().authenticated()
                 );

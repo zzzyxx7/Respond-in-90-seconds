@@ -1,6 +1,7 @@
 package com.fusion.docfusion.security;
 
 import com.fusion.docfusion.common.Result;
+import com.fusion.docfusion.exception.ErrorCode;
 import com.fusion.docfusion.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -87,7 +88,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private void sendUnauthorized(HttpServletResponse response, String msg) throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json;charset=UTF-8");
-        Result<String> result = Result.error(401, msg);
+        Result<String> result = Result.error(ErrorCode.UNAUTHORIZED, msg);
         response.getWriter().write(objectMapper.writeValueAsString(result));
     }
 }

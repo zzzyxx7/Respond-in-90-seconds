@@ -19,6 +19,14 @@ public enum TaskStatus {
     /**
      * 处理失败，错误信息记录在 errorMessage 中。
      */
-    FAILED
+    FAILED,
+    /**
+     * 处理超时。可由人工或系统重新投递执行。
+     */
+    TIMEOUT,
+    /**
+     * 已取消。用户主动终止本次任务。
+     */
+    CANCELLED
 }
 

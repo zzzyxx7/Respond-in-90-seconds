@@ -108,11 +108,12 @@ CREATE TABLE IF NOT EXISTS fill_task (
                                          template_id BIGINT DEFAULT NULL COMMENT '使用的模板ID，FREE 模式为空',
                                          mode VARCHAR(32) NOT NULL DEFAULT 'TEMPLATE' COMMENT '任务模式：TEMPLATE（模板模式）/ FREE（自由模式）',
                                          user_requirement VARCHAR(512) DEFAULT NULL COMMENT '自由模式下的用户需求描述',
-                                         status VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态：PENDING/RUNNING/SUCCESS/FAILED',
+                                         status VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态：PENDING/RUNNING/SUCCESS/FAILED/TIMEOUT/CANCELLED',
                                          result_file_path VARCHAR(512) DEFAULT NULL COMMENT '生成的结果表格文件路径',
                                          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '任务创建时间',
                                          finished_at DATETIME DEFAULT NULL COMMENT '任务完成时间',
                                          error_message VARCHAR(512) DEFAULT NULL COMMENT '如失败，记录错误信息',
+                                         version BIGINT NOT NULL DEFAULT 0 COMMENT '乐观锁版本号，每次更新+1',
 
                                          INDEX idx_fill_document_set_id (document_set_id),
                                          INDEX idx_fill_template_id (template_id),

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fusion.docfusion.dto.ExtractFieldResult;
 import com.fusion.docfusion.exception.BusinessException;
+import com.fusion.docfusion.exception.ErrorCode;
 import com.fusion.docfusion.service.AiExtractService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -63,7 +64,7 @@ public class AiExtractServiceImpl implements AiExtractService {
     @Override
     public Map<String, ExtractFieldResult> analyze(File file, String instruction) {
         if (file == null || !file.exists()) {
-            throw new BusinessException("待分析的文件不存在");
+            throw new BusinessException(ErrorCode.AI_ANALYZE_FILE_MISSING);
         }
 
         if (aiMockEnabled) {
@@ -76,7 +77,7 @@ public class AiExtractServiceImpl implements AiExtractService {
                 return parseResult(json);
             } catch (Exception e) {
                 log.error("解析 Mock AI JSON 失败", e);
-                throw new BusinessException("Mock AI 返回 JSON 解析失败：" + e.getMessage());
+                throw new BusinessException(ErrorCode.AI_MOCK_PARSE_FAILED, "Mock AI 返回 JSON 解析失败：" + e.getMessage());
             }
         }
 
@@ -97,7 +98,7 @@ public class AiExtractServiceImpl implements AiExtractService {
             try {
                 ResponseEntity<String> response = restTemplate.postForEntity(url, requestEntity, String.class);
                 if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                    throw new BusinessException("AI 抽取服务调用失败，HTTP 状态码：" + response.getStatusCode());
+                    throw new BusinessException(ErrorCode.AI_EXTRACT_HTTP_FAILED, "AI 抽取服务调用失败，HTTP 状态码：" + response.getStatusCode());
                 }
                 return parseResult(response.getBody());
             } catch (BusinessException e) {
@@ -114,18 +115,18 @@ public class AiExtractServiceImpl implements AiExtractService {
                     log.warn("AI 返回 5xx, attempt={}/{}, status={}", attempt, maxAttempts, e.getStatusCode());
                     sleepRetry();
                 } else {
-                    throw new BusinessException(formatHttpClientError("AI 抽取服务", e));
+                    throw new BusinessException(ErrorCode.AI_EXTRACT_HTTP_FAILED, formatHttpClientError("AI 抽取服务", e));
                 }
             } catch (HttpClientErrorException e) {
-                throw new BusinessException(formatHttpClientError("AI 抽取服务", e));
+                throw new BusinessException(ErrorCode.AI_EXTRACT_HTTP_FAILED, formatHttpClientError("AI 抽取服务", e));
             } catch (Exception e) {
                 log.error("调用 AI 抽取服务异常", e);
-                throw new BusinessException("调用 AI 抽取服务异常：" + humanizeException(e));
+                throw new BusinessException(ErrorCode.AI_EXTRACT_FAILED, "调用 AI 抽取服务异常：" + humanizeException(e));
             }
         }
 
         String detail = lastFailure == null ? "未知原因" : humanizeException(lastFailure);
-        throw new BusinessException("AI 抽取服务在 " + maxAttempts + " 次重试后仍失败：" + detail);
+        throw new BusinessException(ErrorCode.AI_EXTRACT_FAILED, "AI 抽取服务在 " + maxAttempts + " 次重试后仍失败：" + detail);
     }
 
     private void sleepRetry() {
@@ -133,7 +134,7 @@ public class AiExtractServiceImpl implements AiExtractService {
             Thread.sleep(retryIntervalMs);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new BusinessException("AI 调用重试被中断");
+            throw new BusinessException(ErrorCode.AI_EXTRACT_RETRY_INTERRUPTED);
         }
     }
 

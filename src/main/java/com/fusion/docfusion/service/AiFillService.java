@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface AiFillService {
     void fillTemplateForTask(FillTask task, List<Document> docs);
+
+    void fillFreeForTask(FillTask task, List<Document> docs);
 }

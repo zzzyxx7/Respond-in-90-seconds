@@ -22,6 +22,16 @@ public interface FillService {
     Result<FillTaskVO> getTask(Long taskId);
 
     /**
+     * 人工重跑入口：允许对 FAILED/TIMEOUT 任务重新投递。
+     */
+    Result<FillTaskVO> rerunTask(Long taskId);
+
+    /**
+     * 取消任务：允许对 PENDING/RUNNING 任务取消。
+     */
+    Result<FillTaskVO> cancelTask(Long taskId);
+
+    /**
      * 自由模式：根据文档集 + 用户需求，生成临时汇总表（不依赖预先配置的模板）。
      * 目前为占位实现：生成一个简单的 Excel，列出文档文件名，后续你可以接入 AI 生成真实表头和数据。
      */

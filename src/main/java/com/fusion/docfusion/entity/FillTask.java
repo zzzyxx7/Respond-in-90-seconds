@@ -33,4 +33,8 @@ public class FillTask {
      * 异常信息（如任务失败时记录原因）
      */
     private String errorMessage;
+    /**
+     * 乐观锁版本号（每次更新 +1）。
+     */
+    private Long version;
 }

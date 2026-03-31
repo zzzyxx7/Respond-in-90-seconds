@@ -5,6 +5,7 @@ import com.fusion.docfusion.config.UploadProperties;
 import com.fusion.docfusion.dto.TemplateVO;
 import com.fusion.docfusion.entity.Template;
 import com.fusion.docfusion.exception.BusinessException;
+import com.fusion.docfusion.exception.ErrorCode;
 import com.fusion.docfusion.mapper.TemplateMapper;
 import com.fusion.docfusion.security.SecurityUtils;
 import com.fusion.docfusion.service.TemplateService;
@@ -40,29 +41,29 @@ public class TemplateServiceImpl implements TemplateService {
     public Result<TemplateVO> uploadTemplate(MultipartFile file) {
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
-            throw new BusinessException("请先登录再上传模板");
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录再上传模板");
         }
         if (file == null || file.isEmpty()) {
-            throw new BusinessException("请选择模板文件");
+            throw new BusinessException(ErrorCode.TEMPLATE_UPLOAD_EMPTY);
         }
         if (file.getSize() > MAX_TEMPLATE_UPLOAD_BYTES) {
-            throw new BusinessException(400, "模板文件过大，请控制在 50MB 以内");
+            throw new BusinessException(ErrorCode.TEMPLATE_TOO_LARGE);
         }
 
         String originalFilename = file.getOriginalFilename();
         String safeFilename = sanitizeFilename(originalFilename);
         if (safeFilename == null || safeFilename.isBlank()) {
-            throw new BusinessException("文件名无效");
+            throw new BusinessException(ErrorCode.TEMPLATE_FILENAME_INVALID);
         }
         String ext = getExtension(safeFilename).toLowerCase();
         if (!ALLOWED_TYPES.contains(ext)) {
-            throw new BusinessException("仅支持 word(docx/doc) 或 excel(xlsx/xls) 模板");
+            throw new BusinessException(ErrorCode.TEMPLATE_TYPE_UNSUPPORTED);
         }
         Path basePath = Paths.get(uploadProperties.getTemplatesDir());
         try {
             Files.createDirectories(basePath);
         } catch (IOException e) {
-            throw new BusinessException("创建模板目录失败: " + e.getMessage());
+            throw new BusinessException(ErrorCode.TEMPLATE_DIR_FAIL, "创建模板目录失败: " + e.getMessage());
         }
         String savedName = UUID.randomUUID().toString() + "_" + safeFilename;
 
@@ -70,13 +71,13 @@ public class TemplateServiceImpl implements TemplateService {
         Path normalizedBasePath = basePath.normalize();
         Path target = basePath.resolve(savedName).normalize();
         if (!target.startsWith(normalizedBasePath)) {
-            throw new BusinessException(400, "非法模板文件名或路径");
+            throw new BusinessException(ErrorCode.TEMPLATE_PATH_INVALID);
         }
 
         try {
             file.transferTo(target.toFile());
         } catch (IOException e) {
-            throw new BusinessException("保存模板失败: " + e.getMessage());
+            throw new BusinessException(ErrorCode.TEMPLATE_SAVE_FAILED, "保存模板失败: " + e.getMessage());
         }
         String fileType = ext.equals("doc") || ext.equals("docx") ? "word" : "excel";
         Template t = new Template();
@@ -96,7 +97,7 @@ public class TemplateServiceImpl implements TemplateService {
     public Result<List<TemplateVO>> listTemplates() {
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
-            throw new BusinessException("请先登录查看模板列表");
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录查看模板列表");
         }
         List<Template> list = templateMapper.selectAllByOwner(currentUserId);
         List<TemplateVO> vos = list.stream().map(this::toVO).toList();
@@ -107,7 +108,7 @@ public class TemplateServiceImpl implements TemplateService {
     public Result<List<TemplateVO>> listByReportType(Long reportTypeId) {
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null) {
-            throw new BusinessException("请先登录查看模板列表");
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录查看模板列表");
         }
         List<Template> list = templateMapper.selectByReportTypeIdAndOwner(reportTypeId, currentUserId);
         List<TemplateVO> vos = list.stream().map(this::toVO).toList();
@@ -118,11 +119,11 @@ public class TemplateServiceImpl implements TemplateService {
     public Result<TemplateVO> getById(Long templateId) {
         Template t = templateMapper.selectById(templateId);
         if (t == null) {
-            throw new BusinessException("模板不存在");
+            throw new BusinessException(ErrorCode.TEMPLATE_NOT_FOUND);
         }
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (t.getOwnerId() != null && !currentUserId.equals(t.getOwnerId()))) {
-            throw new BusinessException("无权访问该模板");
+            throw new BusinessException(ErrorCode.TEMPLATE_FORBIDDEN_VIEW);
         }
         TemplateVO vo = toVO(t);
         return Result.success(vo);
@@ -132,11 +133,11 @@ public class TemplateServiceImpl implements TemplateService {
     public Result<TemplateVO> updateTemplate(Long templateId, TemplateVO vo) {
         Template t = templateMapper.selectById(templateId);
         if (t == null) {
-            throw new BusinessException("模板不存在");
+            throw new BusinessException(ErrorCode.TEMPLATE_NOT_FOUND);
         }
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (t.getOwnerId() != null && !currentUserId.equals(t.getOwnerId()))) {
-            throw new BusinessException("无权修改该模板");
+            throw new BusinessException(ErrorCode.TEMPLATE_FORBIDDEN_UPDATE);
         }
         if (vo.getFileName() != null && !vo.getFileName().isBlank()) {
             t.setFileName(vo.getFileName().trim());
@@ -153,11 +154,11 @@ public class TemplateServiceImpl implements TemplateService {
     public Result<Boolean> deleteTemplate(Long templateId) {
         Template t = templateMapper.selectById(templateId);
         if (t == null) {
-            throw new BusinessException("模板不存在");
+            throw new BusinessException(ErrorCode.TEMPLATE_NOT_FOUND);
         }
         Long currentUserId = SecurityUtils.currentUserId();
         if (currentUserId == null || (t.getOwnerId() != null && !currentUserId.equals(t.getOwnerId()))) {
-            throw new BusinessException("无权删除该模板");
+            throw new BusinessException(ErrorCode.TEMPLATE_FORBIDDEN_DELETE);
         }
         int rows = templateMapper.deleteById(templateId);
         return Result.success(rows > 0);
