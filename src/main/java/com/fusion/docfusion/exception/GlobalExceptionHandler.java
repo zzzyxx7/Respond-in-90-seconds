@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 
@@ -66,6 +67,13 @@ public class GlobalExceptionHandler {
     public Result<String> handleAccessDenied(AccessDeniedException e) {
         log.warn("无权限访问: {}", e.getMessage());
         return Result.error(ErrorCode.FORBIDDEN, "无权限访问该资源");
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Result<String> handleNoResourceFound(NoResourceFoundException e) {
+        log.warn("资源不存在: {}", e.getResourcePath());
+        return Result.error(ErrorCode.NOT_FOUND, "资源不存在");
     }
 
     @ExceptionHandler(Exception.class)

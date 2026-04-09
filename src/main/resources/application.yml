@@ -4,6 +4,7 @@ spring:
 
   profiles:
     active: dev
+    default: dev
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -117,5 +118,22 @@ fill:
       batch-size: 200
       # 定时补偿：每 5 分钟扫描一次超时 RUNNING
       cron: "0 */5 * * * ?"
+
+# 为 default profile 提供本地兜底配置（避免 IDEA 未激活 dev 时启动失败）
+doc:
+  datasource:
+    host: localhost
+    port: 3306
+    database: mydatabase
+    username: root
+    password: 1234
+  redis:
+    host: localhost
+    port: 6379
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
 
 

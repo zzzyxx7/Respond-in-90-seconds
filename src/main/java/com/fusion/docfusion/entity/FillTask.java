@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 @Data
 public class FillTask {
     private Long id;
+    /** 对外公开使用的任务ID（不可预测，防枚举） */
+    private String publicId;
     /** 创建任务的用户ID，可为空（未登录） */
     private Long userId;
     private Long documentSetId;

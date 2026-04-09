@@ -16,7 +16,11 @@ import com.fusion.docfusion.mapper.FillTaskMapper;
 import com.fusion.docfusion.mapper.FillTaskStepMapper;
 import com.fusion.docfusion.mapper.TemplateMapper;
 import com.fusion.docfusion.service.AiFillService;
+import com.fusion.docfusion.sse.FillTaskSseBroker;
+import com.fusion.docfusion.sse.FillTaskStatusEvent;
+import com.fusion.docfusion.sse.FillTaskStepEvent;
 import com.fusion.docfusion.util.RedisDistributedLock;
+import com.fusion.docfusion.util.FillTaskCancelService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -71,6 +75,8 @@ public class FillTaskConsumer {
     private final AiFillService aiFillService;
     private final AmqpTemplate amqpTemplate;
     private final RedisDistributedLock distributedLock;
+    private final FillTaskSseBroker sseBroker;
+    private final FillTaskCancelService cancelService;
 
     @RabbitListener(queues = RabbitConfig.FILL_TASK_QUEUE)
     public void handleFillTask(
@@ -96,6 +102,12 @@ public class FillTaskConsumer {
                 channel.basicAck(deliveryTag, false);
                 return;
             }
+            if (cancelService.isCancelRequested(task.getPublicId())
+                    || TaskStatus.CANCELLED.name().equalsIgnoreCase(task.getStatus())) {
+                markCancelledIfNeeded(task);
+                channel.basicAck(deliveryTag, false);
+                return;
+            }
 
             // 幂等：MQ 可能重复投递已成功消息，避免重复写结果/重复生成文件
             if (TaskStatus.SUCCESS.name().equalsIgnoreCase(task.getStatus())) {
@@ -118,6 +130,7 @@ public class FillTaskConsumer {
                     int timeoutUpdated = fillTaskMapper.updateById(task);
                     if (timeoutUpdated > 0) {
                         task.setVersion(nextVersion(task.getVersion()));
+                        publishTaskStatus(task);
                     }
                 } else {
                     // 重复投递保护：已有消费者正在处理，直接 ACK 跳过
@@ -135,6 +148,7 @@ public class FillTaskConsumer {
                 return;
             }
             task.setVersion(nextVersion(task.getVersion()));
+            publishTaskStatus(task);
 
             if (TaskMode.TEMPLATE.name().equalsIgnoreCase(task.getMode())) {
                 processTemplateTask(task);
@@ -155,6 +169,8 @@ public class FillTaskConsumer {
             int successUpdated = fillTaskMapper.updateById(task);
             if (successUpdated <= 0) {
                 log.warn("任务完成写回冲突，保持最新状态, taskId={}", taskId);
+            } else {
+                publishTaskStatus(task);
             }
             channel.basicAck(deliveryTag, false);
         } catch (Exception e) {
@@ -164,10 +180,15 @@ public class FillTaskConsumer {
             try {
                 FillTask task = fillTaskMapper.selectById(taskId);
                 if (task != null) {
+                    if (isCancelledException(e) || cancelService.isCancelRequested(task.getPublicId())) {
+                        markCancelledIfNeeded(task);
+                        throw e;
+                    }
                     task.setStatus(resolveFailedStatus(e).name());
                     task.setFinishedAt(LocalDateTime.now());
                     task.setErrorMessage(truncateErrorMessage(e));
                     fillTaskMapper.updateById(task);
+                    publishTaskStatus(task);
                 }
             } catch (Exception ignore) {
                 // ignore
@@ -259,11 +280,12 @@ public class FillTaskConsumer {
 
     private void processTemplateTask(FillTask task) throws IOException {
         Long taskId = task.getId();
+        String taskPublicId = task.getPublicId();
         Long documentSetId = task.getDocumentSetId();
         Long templateId = task.getTemplateId();
 
         // RAG：当前未接入，先标记跳过，便于前端链路展示（后续接入时改为 RUNNING/SUCCESS）
-        upsertStep(taskId, STEP_RAG, "RAG 检索", STEP_STATUS_SKIPPED, null, null, "当前未接入 RAG", null);
+        upsertStep(taskPublicId, taskId, STEP_RAG, "RAG 检索", STEP_STATUS_SKIPPED, null, null, "当前未接入 RAG", null);
 
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
@@ -279,37 +301,44 @@ public class FillTaskConsumer {
         }
 
         // 模板模式改为完全交由 AI 任务流处理，后端不再本地抽取
-        upsertStep(taskId, STEP_EXTRACT, "字段抽取", STEP_STATUS_SKIPPED, null, null,
+        upsertStep(taskPublicId, taskId, STEP_EXTRACT, "字段抽取", STEP_STATUS_SKIPPED, null, null,
                 "已切换为 AI 端内置抽取", null);
 
         // 真实填表：改为调用 AI 任务流接口（/api/tasks/create -> 轮询 -> download）
         LocalDateTime fillStart = LocalDateTime.now();
-        upsertStep(taskId, STEP_FILL, "模板填表", STEP_STATUS_RUNNING, fillStart, null,
+        upsertStep(taskPublicId, taskId, STEP_FILL, "模板填表", STEP_STATUS_RUNNING, fillStart, null,
                 "调用 AI 填表任务流", null);
         try {
+            ensureNotCancelled(taskPublicId, taskId, "模板填表");
             aiFillService.fillTemplateForTask(task, docs);
             LocalDateTime fillEnd = LocalDateTime.now();
-            upsertStep(taskId, STEP_FILL, "模板填表", STEP_STATUS_SUCCESS, fillStart, fillEnd,
+            upsertStep(taskPublicId, taskId, STEP_FILL, "模板填表", STEP_STATUS_SUCCESS, fillStart, fillEnd,
                     "已完成 AI 填表", null);
 
             // 结果文件已由 AiFillService 落盘，这里仅补一个“生成结果”步骤用于前端可视化
             LocalDateTime genNow = LocalDateTime.now();
-            upsertStep(taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_SUCCESS, genNow, genNow,
+            upsertStep(taskPublicId, taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_SUCCESS, genNow, genNow,
                     "输出: " + task.getResultFilePath(), null);
         } catch (Exception e) {
             LocalDateTime fillEnd = LocalDateTime.now();
-            upsertStep(taskId, STEP_FILL, "模板填表", STEP_STATUS_FAILED, fillStart, fillEnd,
-                    "AI 填表失败", e.getMessage());
+            if (isCancelledException(e) || cancelService.isCancelRequested(taskPublicId)) {
+                upsertStep(taskPublicId, taskId, STEP_FILL, "模板填表", STEP_STATUS_FAILED, fillStart, fillEnd,
+                        "用户取消任务，停止处理", "cancelled");
+            } else {
+                upsertStep(taskPublicId, taskId, STEP_FILL, "模板填表", STEP_STATUS_FAILED, fillStart, fillEnd,
+                        "AI 填表失败", e.getMessage());
+            }
             throw e;
         }
     }
 
     private void processFreeTask(FillTask task) throws IOException {
         Long taskId = task.getId();
+        String taskPublicId = task.getPublicId();
         Long documentSetId = task.getDocumentSetId();
 
-        upsertStep(taskId, STEP_RAG, "RAG 检索", STEP_STATUS_SKIPPED, null, null, "当前未接入 RAG", null);
-        upsertStep(taskId, STEP_EXTRACT, "字段抽取", STEP_STATUS_SKIPPED, null, null, "自由模式由 AI 内部处理抽取", null);
+        upsertStep(taskPublicId, taskId, STEP_RAG, "RAG 检索", STEP_STATUS_SKIPPED, null, null, "当前未接入 RAG", null);
+        upsertStep(taskPublicId, taskId, STEP_EXTRACT, "字段抽取", STEP_STATUS_SKIPPED, null, null, "自由模式由 AI 内部处理抽取", null);
 
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
@@ -321,25 +350,32 @@ public class FillTaskConsumer {
         }
 
         LocalDateTime fillStart = LocalDateTime.now();
-        upsertStep(taskId, STEP_FILL, "汇总生成", STEP_STATUS_RUNNING, fillStart, null,
+        upsertStep(taskPublicId, taskId, STEP_FILL, "汇总生成", STEP_STATUS_RUNNING, fillStart, null,
                 "调用 AI 自由模式任务流, 文档数: " + docs.size(), null);
         try {
+            ensureNotCancelled(taskPublicId, taskId, "汇总生成");
             aiFillService.fillFreeForTask(task, docs);
             LocalDateTime fillEnd = LocalDateTime.now();
-            upsertStep(taskId, STEP_FILL, "汇总生成", STEP_STATUS_SUCCESS, fillStart, fillEnd,
+            upsertStep(taskPublicId, taskId, STEP_FILL, "汇总生成", STEP_STATUS_SUCCESS, fillStart, fillEnd,
                     "已完成 AI 自由模式处理", null);
             LocalDateTime genNow = LocalDateTime.now();
-            upsertStep(taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_SUCCESS, genNow, genNow,
+            upsertStep(taskPublicId, taskId, STEP_GENERATE, "生成结果文件", STEP_STATUS_SUCCESS, genNow, genNow,
                     "输出: " + task.getResultFilePath(), null);
         } catch (Exception e) {
             LocalDateTime fillEnd = LocalDateTime.now();
-            upsertStep(taskId, STEP_FILL, "汇总生成", STEP_STATUS_FAILED, fillStart, fillEnd,
-                    "AI 自由模式处理失败", e.getMessage());
+            if (isCancelledException(e) || cancelService.isCancelRequested(taskPublicId)) {
+                upsertStep(taskPublicId, taskId, STEP_FILL, "汇总生成", STEP_STATUS_FAILED, fillStart, fillEnd,
+                        "用户取消任务，停止处理", "cancelled");
+            } else {
+                upsertStep(taskPublicId, taskId, STEP_FILL, "汇总生成", STEP_STATUS_FAILED, fillStart, fillEnd,
+                        "AI 自由模式处理失败", e.getMessage());
+            }
             throw e;
         }
     }
 
-    private void upsertStep(Long taskId,
+    private void upsertStep(String taskPublicId,
+                            Long taskId,
                             String stepCode,
                             String stepName,
                             String status,
@@ -362,6 +398,55 @@ public class FillTaskConsumer {
         step.setMessage(message);
         step.setErrorMessage(errorMessage);
         fillTaskStepMapper.upsert(step);
+        if (taskPublicId != null && !taskPublicId.isBlank()) {
+            sseBroker.publish(taskPublicId, "STEP_UPSERT", new FillTaskStepEvent(
+                    stepCode,
+                    stepName,
+                    status,
+                    startedAt,
+                    finishedAt,
+                    step.getDurationMs(),
+                    message,
+                    errorMessage
+            ));
+        }
+    }
+
+    private void publishTaskStatus(FillTask task) {
+        if (task == null || task.getPublicId() == null || task.getPublicId().isBlank()) {
+            return;
+        }
+        sseBroker.publish(task.getPublicId(), "TASK_STATUS", new FillTaskStatusEvent(
+                task.getStatus(),
+                task.getErrorMessage(),
+                task.getFinishedAt()
+        ));
+    }
+
+    private void ensureNotCancelled(String taskPublicId, Long taskId, String stepName) {
+        if (taskPublicId != null && cancelService.isCancelRequested(taskPublicId)) {
+            throw new BusinessException(ErrorCode.TASK_CANCELLED, "任务已取消，停止步骤: " + stepName + ", taskId=" + taskId);
+        }
+    }
+
+    private static boolean isCancelledException(Throwable e) {
+        if (e instanceof BusinessException be) {
+            return ErrorCode.TASK_CANCELLED.name().equals(be.getErrorCode());
+        }
+        return false;
+    }
+
+    private void markCancelledIfNeeded(FillTask task) {
+        if (task == null) return;
+        if (!TaskStatus.CANCELLED.name().equalsIgnoreCase(task.getStatus())) {
+            task.setStatus(TaskStatus.CANCELLED.name());
+            task.setFinishedAt(LocalDateTime.now());
+            if (task.getErrorMessage() == null || task.getErrorMessage().isBlank()) {
+                task.setErrorMessage("用户主动取消任务");
+            }
+            fillTaskMapper.updateById(task);
+        }
+        publishTaskStatus(task);
     }
 }
 

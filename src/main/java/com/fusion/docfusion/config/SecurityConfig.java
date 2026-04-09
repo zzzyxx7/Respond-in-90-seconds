@@ -37,8 +37,19 @@ public class SecurityConfig {
                         ).permitAll()
                         // 登录与认证相关接口本身公开
                         .requestMatchers("/api/auth/**").permitAll()
-                        // 核心业务接口对匿名用户也开放（提交填表、查询任务、下载结果等）
-                        .requestMatchers("/api/fill/**").permitAll()
+                        // 填表：仅 publicId 新接口对普通用户开放；老的数字 taskId 接口仅管理员可用
+                        .requestMatchers(
+                                "/api/fill/tasks/public/**",
+                                "/api/fill/download/public/**"
+                        ).permitAll()
+                        .requestMatchers(
+                                "/api/fill/submit",
+                                "/api/fill/free"
+                        ).permitAll()
+                        .requestMatchers(
+                                "/api/fill/tasks/**",
+                                "/api/fill/download/**"
+                        ).hasRole("ADMIN")
                         .requestMatchers("/api/documents/**").permitAll()
                         .requestMatchers("/api/templates/**").permitAll()
                         .requestMatchers("/api/report-types/**").permitAll()

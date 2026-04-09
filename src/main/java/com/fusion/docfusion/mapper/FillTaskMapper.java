@@ -12,6 +12,7 @@ public interface FillTaskMapper {
     int insert(FillTask entity);
     int updateById(FillTask entity);
     FillTask selectById(@Param("id") Long id);
+    FillTask selectByPublicId(@Param("publicId") String publicId);
 
     List<FillTask> selectByConditions(@Param("userId") Long userId,
                                       @Param("mode") String mode,

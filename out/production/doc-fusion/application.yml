@@ -4,6 +4,7 @@ spring:
 
   profiles:
     active: dev
+    default: dev
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -78,6 +79,17 @@ ai:
     # 自由模式也走同一任务流，A23 接口要求 template 必填，这里配置默认模板（相对 templatesDir 或绝对路径）
     free-template-path:
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+
 logging:
   level:
     com.fusion.docfusion: info
@@ -98,5 +110,30 @@ fill:
     running-timeout-minutes: 10
     # Redis 分布式任务锁 TTL（秒）：防止同一 taskId 被并发消费
     lock-ttl-seconds: 1800
+    recovery:
+      enabled: true
+      # 服务启动后立即执行一次恢复扫描
+      startup-run: true
+      # 每批最多恢复条数
+      batch-size: 200
+      # 定时补偿：每 5 分钟扫描一次超时 RUNNING
+      cron: "0 */5 * * * ?"
+
+# 为 default profile 提供本地兜底配置（避免 IDEA 未激活 dev 时启动失败）
+doc:
+  datasource:
+    host: localhost
+    port: 3306
+    database: mydatabase
+    username: root
+    password: 1234
+  redis:
+    host: localhost
+    port: 6379
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
 
 

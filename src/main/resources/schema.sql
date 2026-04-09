@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS template (
  ******************************/
 CREATE TABLE IF NOT EXISTS fill_task (
                                          id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '填表任务ID',
+                                         public_id VARCHAR(64) NOT NULL COMMENT '对外任务ID（不可预测，防枚举）',
                                          user_id BIGINT DEFAULT NULL COMMENT '创建任务的用户ID，可为空（未登录）',
                                          document_set_id BIGINT NOT NULL COMMENT '使用的文档集ID',
                                          template_id BIGINT DEFAULT NULL COMMENT '使用的模板ID，FREE 模式为空',
@@ -118,6 +119,7 @@ CREATE TABLE IF NOT EXISTS fill_task (
                                          INDEX idx_fill_document_set_id (document_set_id),
                                          INDEX idx_fill_template_id (template_id),
                                          INDEX idx_fill_user_id (user_id),
+                                         UNIQUE KEY uk_fill_task_public_id (public_id),
 
                                          CONSTRAINT fk_fill_task_document_set
                                              FOREIGN KEY (document_set_id) REFERENCES document_set(id)
@@ -251,3 +253,21 @@ CREATE TABLE IF NOT EXISTS extracted_value (
                                                        ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     COMMENT='抽取结果：非结构化文档中抽取出的字段值';
+
+
+/******************************
+ * 12. 兼容升级（已有库执行）
+ * 为 fill_task 增加 public_id 防止对外枚举任务ID
+ ******************************/
+ALTER TABLE fill_task
+    ADD COLUMN IF NOT EXISTS public_id VARCHAR(64) NULL COMMENT '对外任务ID（不可预测，防枚举）' AFTER id;
+
+UPDATE fill_task
+SET public_id = REPLACE(UUID(), '-', '')
+WHERE public_id IS NULL OR public_id = '';
+
+ALTER TABLE fill_task
+    MODIFY COLUMN public_id VARCHAR(64) NOT NULL;
+
+ALTER TABLE fill_task
+    ADD UNIQUE INDEX IF NOT EXISTS uk_fill_task_public_id (public_id);

@@ -10,6 +10,7 @@ import com.fusion.docfusion.exception.BusinessException;
 import com.fusion.docfusion.exception.ErrorCode;
 import com.fusion.docfusion.mapper.TemplateMapper;
 import com.fusion.docfusion.service.AiFillService;
+import com.fusion.docfusion.util.FillTaskCancelService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,6 +50,7 @@ public class AiFillServiceImpl implements AiFillService {
     private final RestTemplate restTemplate;
     private final TemplateMapper templateMapper;
     private final UploadProperties uploadProperties;
+    private final FillTaskCancelService cancelService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${ai.base-url:http://localhost:8000}")
@@ -92,7 +94,7 @@ public class AiFillServiceImpl implements AiFillService {
         }
 
         String taskId = createRemoteTask(templateFile.toFile(), docs, task.getUserRequirement());
-        waitForRemoteTask(taskId);
+        waitForRemoteTask(task.getPublicId(), taskId);
         DownloadedResult downloaded = downloadRemoteResult(taskId, template.getFileName(),
                 new String[]{"result_xlsx", "result_docx", "report_bundle", "result_json"});
         task.setResultFilePath(downloaded.localFileName);
@@ -109,7 +111,7 @@ public class AiFillServiceImpl implements AiFillService {
         }
         File freeTemplate = resolveFreeTemplateFile();
         String taskId = createRemoteTask(freeTemplate, docs, task.getUserRequirement());
-        waitForRemoteTask(taskId);
+        waitForRemoteTask(task.getPublicId(), taskId);
         DownloadedResult downloaded = downloadRemoteResult(taskId, "free_mode.xlsx",
                 new String[]{"result_xlsx", "result_json", "report_bundle", "result_docx"});
         task.setResultFilePath(downloaded.localFileName);
@@ -154,11 +156,14 @@ public class AiFillServiceImpl implements AiFillService {
         }
     }
 
-    private void waitForRemoteTask(String remoteTaskId) {
+    private void waitForRemoteTask(String taskPublicId, String remoteTaskId) {
         String statusUrl = aiBaseUrl + String.format(statusPathFormat, remoteTaskId);
         long deadline = System.currentTimeMillis() + pollTimeoutMs;
         String lastStatus = "";
         while (System.currentTimeMillis() < deadline) {
+            if (cancelService.isCancelRequested(taskPublicId)) {
+                throw new BusinessException(ErrorCode.TASK_CANCELLED, "任务已取消，停止等待 AI 结果");
+            }
             try {
                 ResponseEntity<String> resp = restTemplate.getForEntity(statusUrl, String.class);
                 if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {

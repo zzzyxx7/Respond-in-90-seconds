@@ -8,6 +8,8 @@ import java.util.List;
 @Data
 public class FillTaskVO {
     private Long id;
+    /** 对外公开任务ID（不可预测） */
+    private String publicId;
     private Long userId;
     private Long documentSetId;
     private Long templateId;

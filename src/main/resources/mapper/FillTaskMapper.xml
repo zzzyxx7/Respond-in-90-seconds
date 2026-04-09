@@ -6,6 +6,7 @@
 
     <resultMap id="FillTaskResultMap" type="com.fusion.docfusion.entity.FillTask">
         <id property="id" column="id"/>
+        <result property="publicId" column="public_id"/>
         <result property="userId" column="user_id"/>
         <result property="documentSetId" column="document_set_id"/>
         <result property="templateId" column="template_id"/>
@@ -21,9 +22,9 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.FillTask"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO fill_task (user_id, document_set_id, template_id, mode, user_requirement, status, result_file_path,
+        INSERT INTO fill_task (public_id, user_id, document_set_id, template_id, mode, user_requirement, status, result_file_path,
                                created_at, finished_at, error_message, version)
-        VALUES (#{userId}, #{documentSetId}, #{templateId}, #{mode}, #{userRequirement}, #{status}, #{resultFilePath},
+        VALUES (#{publicId}, #{userId}, #{documentSetId}, #{templateId}, #{mode}, #{userRequirement}, #{status}, #{resultFilePath},
                 #{createdAt}, #{finishedAt}, #{errorMessage}, 0)
     </insert>
 
@@ -46,6 +47,12 @@
         SELECT *
         FROM fill_task
         WHERE id = #{id}
+    </select>
+
+    <select id="selectByPublicId" resultMap="FillTaskResultMap">
+        SELECT *
+        FROM fill_task
+        WHERE public_id = #{publicId}
     </select>
 
     <select id="selectByConditions" resultMap="FillTaskResultMap">

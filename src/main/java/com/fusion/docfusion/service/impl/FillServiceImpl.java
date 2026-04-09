@@ -24,15 +24,19 @@ import com.fusion.docfusion.mapper.TemplateMapper;
 import com.fusion.docfusion.service.FillService;
 import com.fusion.docfusion.security.SecurityUtils;
 import com.fusion.docfusion.util.RedisRateLimiter;
+import com.fusion.docfusion.util.FillTaskCancelService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.stereotype.Service;
+import com.fusion.docfusion.sse.FillTaskSseBroker;
+import com.fusion.docfusion.sse.FillTaskStatusEvent;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 填表任务：创建任务后执行填表逻辑。
@@ -50,6 +54,8 @@ public class FillServiceImpl implements FillService {
     private final FillTaskStepMapper fillTaskStepMapper;
     private final AmqpTemplate amqpTemplate;
     private final RedisRateLimiter rateLimiter;
+    private final FillTaskCancelService cancelService;
+    private final FillTaskSseBroker sseBroker;
 
     // 比赛/演示用：避免刷任务导致队列膨胀
     private static final int MAX_SUBMISSIONS_PER_MINUTE = 100;
@@ -93,9 +99,11 @@ public class FillServiceImpl implements FillService {
         task.setTemplateId(templateId);
         task.setMode(TaskMode.TEMPLATE.name());
         task.setUserRequirement(request.getUserRequirement());
+        task.setPublicId(generatePublicId());
         task.setStatus(TaskStatus.PENDING.name());
         task.setCreatedAt(LocalDateTime.now());
         fillTaskMapper.insert(task);
+        cancelService.clearCancel(task.getPublicId());
 
         // 发送异步任务消息
         amqpTemplate.convertAndSend(RabbitConfig.FILL_TASK_EXCHANGE, RabbitConfig.FILL_TASK_ROUTING_KEY, task.getId());
@@ -106,26 +114,21 @@ public class FillServiceImpl implements FillService {
     @Override
     public Result<FillTaskVO> getTask(Long taskId) {
         FillTask task = fillTaskMapper.selectById(taskId);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND);
-        }
-        Long currentUserId = SecurityUtils.currentUserId();
-        if (currentUserId == null || (task.getUserId() != null && !currentUserId.equals(task.getUserId()))) {
-            throw new BusinessException(ErrorCode.TASK_FORBIDDEN);
-        }
+        ensureTaskAccessible(task, ErrorCode.TASK_FORBIDDEN);
+        return Result.success(toVO(task, true));
+    }
+
+    @Override
+    public Result<FillTaskVO> getTaskByPublicId(String taskPublicId) {
+        FillTask task = fillTaskMapper.selectByPublicId(taskPublicId);
+        ensureTaskAccessible(task, ErrorCode.TASK_FORBIDDEN);
         return Result.success(toVO(task, true));
     }
 
     @Override
     public Result<FillTaskVO> rerunTask(Long taskId) {
         FillTask task = fillTaskMapper.selectById(taskId);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND);
-        }
-        Long currentUserId = SecurityUtils.currentUserId();
-        if (currentUserId == null || (task.getUserId() != null && !currentUserId.equals(task.getUserId()))) {
-            throw new BusinessException(ErrorCode.TASK_OPERATION_FORBIDDEN);
-        }
+        ensureTaskAccessible(task, ErrorCode.TASK_OPERATION_FORBIDDEN);
         int changed = fillTaskMapper.resetForRerun(
                 taskId,
                 TaskStatus.FAILED.name(),
@@ -142,20 +145,40 @@ public class FillServiceImpl implements FillService {
             }
             throw new BusinessException(ErrorCode.TASK_RERUN_NOT_ALLOWED);
         }
+        cancelService.clearCancel(task.getPublicId());
         amqpTemplate.convertAndSend(RabbitConfig.FILL_TASK_EXCHANGE, RabbitConfig.FILL_TASK_ROUTING_KEY, taskId);
+        return Result.success(toVO(latest, true));
+    }
+
+    @Override
+    public Result<FillTaskVO> rerunTaskByPublicId(String taskPublicId) {
+        FillTask task = fillTaskMapper.selectByPublicId(taskPublicId);
+        ensureTaskAccessible(task, ErrorCode.TASK_OPERATION_FORBIDDEN);
+        int changed = fillTaskMapper.resetForRerun(
+                task.getId(),
+                TaskStatus.FAILED.name(),
+                TaskStatus.TIMEOUT.name(),
+                TaskStatus.PENDING.name(),
+                "人工触发重跑，等待重新处理"
+        );
+        FillTask latest = fillTaskMapper.selectById(task.getId());
+        if (changed <= 0) {
+            String latestStatus = latest == null ? null : latest.getStatus();
+            if (TaskStatus.PENDING.name().equalsIgnoreCase(latestStatus)
+                    || TaskStatus.RUNNING.name().equalsIgnoreCase(latestStatus)) {
+                return Result.success(toVO(latest, true));
+            }
+            throw new BusinessException(ErrorCode.TASK_RERUN_NOT_ALLOWED);
+        }
+        cancelService.clearCancel(task.getPublicId());
+        amqpTemplate.convertAndSend(RabbitConfig.FILL_TASK_EXCHANGE, RabbitConfig.FILL_TASK_ROUTING_KEY, task.getId());
         return Result.success(toVO(latest, true));
     }
 
     @Override
     public Result<FillTaskVO> cancelTask(Long taskId) {
         FillTask task = fillTaskMapper.selectById(taskId);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND);
-        }
-        Long currentUserId = SecurityUtils.currentUserId();
-        if (currentUserId == null || (task.getUserId() != null && !currentUserId.equals(task.getUserId()))) {
-            throw new BusinessException(ErrorCode.TASK_OPERATION_FORBIDDEN);
-        }
+        ensureTaskAccessible(task, ErrorCode.TASK_OPERATION_FORBIDDEN);
         int changed = fillTaskMapper.cancelIfStatusIn(
                 taskId,
                 TaskStatus.PENDING.name(),
@@ -172,6 +195,33 @@ public class FillServiceImpl implements FillService {
             }
             throw new BusinessException(ErrorCode.TASK_CANCEL_NOT_ALLOWED);
         }
+        cancelService.requestCancel(latest.getPublicId());
+        publishCancelled(latest);
+        return Result.success(toVO(latest, true));
+    }
+
+    @Override
+    public Result<FillTaskVO> cancelTaskByPublicId(String taskPublicId) {
+        FillTask task = fillTaskMapper.selectByPublicId(taskPublicId);
+        ensureTaskAccessible(task, ErrorCode.TASK_OPERATION_FORBIDDEN);
+        int changed = fillTaskMapper.cancelIfStatusIn(
+                task.getId(),
+                TaskStatus.PENDING.name(),
+                TaskStatus.RUNNING.name(),
+                TaskStatus.CANCELLED.name(),
+                "用户主动取消任务",
+                LocalDateTime.now()
+        );
+        FillTask latest = fillTaskMapper.selectById(task.getId());
+        if (changed <= 0) {
+            String latestStatus = latest == null ? null : latest.getStatus();
+            if (TaskStatus.CANCELLED.name().equalsIgnoreCase(latestStatus)) {
+                return Result.success(toVO(latest, true));
+            }
+            throw new BusinessException(ErrorCode.TASK_CANCEL_NOT_ALLOWED);
+        }
+        cancelService.requestCancel(latest.getPublicId());
+        publishCancelled(latest);
         return Result.success(toVO(latest, true));
     }
 
@@ -207,9 +257,11 @@ public class FillServiceImpl implements FillService {
         task.setTemplateId(null);
         task.setMode(TaskMode.FREE.name());
         task.setUserRequirement(request.getUserRequirement());
+        task.setPublicId(generatePublicId());
         task.setStatus(TaskStatus.PENDING.name());
         task.setCreatedAt(LocalDateTime.now());
         fillTaskMapper.insert(task);
+        cancelService.clearCancel(task.getPublicId());
 
         // 发送异步任务消息
         amqpTemplate.convertAndSend(RabbitConfig.FILL_TASK_EXCHANGE, RabbitConfig.FILL_TASK_ROUTING_KEY, task.getId());
@@ -244,6 +296,7 @@ public class FillServiceImpl implements FillService {
     private FillTaskVO toVO(FillTask task, boolean includeSteps) {
         FillTaskVO vo = new FillTaskVO();
         vo.setId(task.getId());
+        vo.setPublicId(task.getPublicId());
         vo.setUserId(task.getUserId());
         vo.setDocumentSetId(task.getDocumentSetId());
         vo.setTemplateId(task.getTemplateId());
@@ -382,4 +435,30 @@ public class FillServiceImpl implements FillService {
         LocalDateTime end = finishedAt != null ? finishedAt : LocalDateTime.now();
         return Duration.between(startedAt, end).toMillis();
     }
+
+    private static String generatePublicId() {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private static void ensureTaskAccessible(FillTask task, ErrorCode forbiddenCode) {
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND);
+        }
+        Long currentUserId = SecurityUtils.currentUserId();
+        if (currentUserId == null || (task.getUserId() != null && !currentUserId.equals(task.getUserId()))) {
+            throw new BusinessException(forbiddenCode);
+        }
+    }
+
+    private void publishCancelled(FillTask task) {
+        if (task == null || task.getPublicId() == null || task.getPublicId().isBlank()) {
+            return;
+        }
+        sseBroker.publish(task.getPublicId(), "TASK_STATUS", new FillTaskStatusEvent(
+                TaskStatus.CANCELLED.name(),
+                task.getErrorMessage(),
+                task.getFinishedAt()
+        ));
+    }
+
 }
