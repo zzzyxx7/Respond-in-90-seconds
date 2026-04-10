@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 @Data
 public class DocumentVO {
     private Long id;
+    private String publicId;
     private String fileName;
     private String fileType;
     private Long fileSize;

@@ -27,6 +27,7 @@ public enum ErrorCode {
     AUTH_USERNAME_LENGTH_INVALID(400, "用户名长度应在 3~50 之间"),
     AUTH_PASSWORD_LENGTH_INVALID(400, "密码长度应在 6~100 之间"),
     AUTH_USERNAME_EXISTS(400, "用户名已存在"),
+    AUTH_OLD_PASSWORD_WRONG(400, "原密码错误"),
 
     // 文档集 / 文档
     DOC_UPLOAD_EMPTY(400, "请至少上传一个文档"),
@@ -43,6 +44,7 @@ public enum ErrorCode {
     DOCUMENT_SET_DELETE_FORBIDDEN(403, "无权删除该文档集"),
     DOCUMENT_SET_VIEW_FORBIDDEN(403, "无权查看该文档集"),
     DOCUMENT_SET_EMPTY_DOCS(400, "文档集中没有文档"),
+    DOCUMENT_SET_PUBLIC_ID_INVALID(400, "文档集 publicId 无效"),
 
     // 模板
     TEMPLATE_UPLOAD_EMPTY(400, "请选择模板文件"),
@@ -53,6 +55,7 @@ public enum ErrorCode {
     TEMPLATE_PATH_INVALID(400, "非法模板文件名或路径"),
     TEMPLATE_SAVE_FAILED(500, "保存模板失败"),
     TEMPLATE_NOT_FOUND(404, "模板不存在"),
+    TEMPLATE_PUBLIC_ID_INVALID(400, "模板 publicId 无效"),
     TEMPLATE_FORBIDDEN_VIEW(403, "无权访问该模板"),
     TEMPLATE_FORBIDDEN_UPDATE(403, "无权修改该模板"),
     TEMPLATE_FORBIDDEN_DELETE(403, "无权删除该模板"),
@@ -70,8 +73,10 @@ public enum ErrorCode {
     // 报表 / 字段 / 模板字段 / 档案
     REPORT_TYPE_NAME_EMPTY(400, "报表类型名称不能为空"),
     REPORT_TYPE_NOT_FOUND(404, "报表类型不存在"),
+    REPORT_TYPE_PUBLIC_ID_INVALID(400, "报表类型 publicId 无效"),
     FIELD_SCHEMA_CODE_EMPTY(400, "字段编码不能为空"),
     FIELD_SCHEMA_NAME_EMPTY(400, "字段名称不能为空"),
+    FIELD_SCHEMA_PUBLIC_ID_INVALID(400, "字段 publicId 无效"),
     TEMPLATE_ID_REQUIRED(400, "模板ID不能为空"),
     TEMPLATE_PROFILE_ID_REQUIRED(400, "模板ID不能为空"),
     TEMPLATE_PROFILE_CONTENT_EMPTY(400, "模板档案内容不能为空"),

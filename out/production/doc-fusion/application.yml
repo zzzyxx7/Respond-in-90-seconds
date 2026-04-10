@@ -43,6 +43,7 @@ app:
     docs-dir: ${app.upload.base-dir}/docs
     templates-dir: ${app.upload.base-dir}/templates
     results-dir: ${app.upload.base-dir}/results
+    avatars-dir: ${app.upload.base-dir}/avatars
   cleanup:
     enabled: true
     # 默认保留 30 天；比赛演示可临时调小为 7

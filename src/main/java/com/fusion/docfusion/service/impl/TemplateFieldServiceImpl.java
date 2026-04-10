@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +40,7 @@ public class TemplateFieldServiceImpl implements TemplateFieldService {
                 continue;
             }
             field.setId(null);
+            field.setPublicId(generatePublicId());
             field.setTemplateId(templateId);
             field.setCreatedAt(now);
             toSave.add(field);
@@ -54,5 +56,9 @@ public class TemplateFieldServiceImpl implements TemplateFieldService {
             throw new BusinessException(ErrorCode.TEMPLATE_ID_REQUIRED);
         }
         return templateFieldMapper.selectByTemplateId(templateId);
+    }
+
+    private static String generatePublicId() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 }

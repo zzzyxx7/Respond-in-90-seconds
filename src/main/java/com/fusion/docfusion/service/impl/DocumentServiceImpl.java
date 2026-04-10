@@ -49,9 +49,6 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional(rollbackFor = Exception.class)
     public Result<DocumentSetVO> uploadDocuments(List<MultipartFile> files) {
         Long currentUserId = SecurityUtils.currentUserId();
-        if (currentUserId == null) {
-            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录再上传文档");
-        }
         if (files == null || files.isEmpty()) {
             throw new BusinessException(ErrorCode.DOC_UPLOAD_EMPTY);
         }
@@ -83,7 +80,9 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         DocumentSet set = new DocumentSet();
+        // 允许匿名上传：ownerId 可为空。若登录则写入 ownerId 便于“历史记录/隔离”。
         set.setOwnerId(currentUserId);
+        set.setPublicId(generatePublicId());
         set.setName(dirName);
         set.setCreatedAt(LocalDateTime.now());
         documentSetMapper.insert(set);
@@ -115,6 +114,7 @@ public class DocumentServiceImpl implements DocumentService {
                 throw new BusinessException(ErrorCode.DOC_SAVE_FAILED, "保存文件失败: " + safeFilename + ", " + e.getMessage());
             }
             Document doc = new Document();
+            doc.setPublicId(UUID.randomUUID().toString().replace("-", ""));
             doc.setDocumentSetId(documentSetId);
             doc.setFileName(safeFilename);
             doc.setFileType(ext);
@@ -125,6 +125,7 @@ public class DocumentServiceImpl implements DocumentService {
 
             DocumentVO vo = new DocumentVO();
             vo.setId(doc.getId());
+            vo.setPublicId(doc.getPublicId());
             vo.setFileName(doc.getFileName());
             vo.setFileType(doc.getFileType());
             vo.setFileSize(doc.getFileSize());
@@ -137,6 +138,7 @@ public class DocumentServiceImpl implements DocumentService {
 
         DocumentSetVO setVO = new DocumentSetVO();
         setVO.setId(documentSetId);
+        setVO.setPublicId(set.getPublicId());
         setVO.setName(set.getName());
         setVO.setCreatedAt(set.getCreatedAt());
         setVO.setDocuments(docList);
@@ -169,6 +171,19 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result<Boolean> deleteDocumentSetByPublicId(String documentSetPublicId) {
+        if (documentSetPublicId == null || documentSetPublicId.isBlank()) {
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_PUBLIC_ID_INVALID);
+        }
+        DocumentSet set = documentSetMapper.selectByPublicId(documentSetPublicId);
+        if (set == null) {
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
+        }
+        return deleteDocumentSet(set.getId());
+    }
+
+    @Override
     public Result<DocumentSetVO> getDocumentSet(Long documentSetId) {
         DocumentSet set = documentSetMapper.selectById(documentSetId);
         if (set == null) {
@@ -190,10 +205,28 @@ public class DocumentServiceImpl implements DocumentService {
         }).toList();
         DocumentSetVO vo = new DocumentSetVO();
         vo.setId(set.getId());
+        vo.setPublicId(set.getPublicId());
         vo.setName(set.getName());
         vo.setCreatedAt(set.getCreatedAt());
         vo.setDocuments(list);
         return Result.success(vo);
+    }
+
+    @Override
+    public Result<DocumentSetVO> getDocumentSetByPublicId(String documentSetPublicId) {
+        if (documentSetPublicId == null || documentSetPublicId.isBlank()) {
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_PUBLIC_ID_INVALID);
+        }
+        DocumentSet set = documentSetMapper.selectByPublicId(documentSetPublicId);
+        if (set == null) {
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
+        }
+        // 匿名上传的 set.ownerId 为空：允许通过 publicId 访问；有 ownerId 的仍按权限校验
+        Long currentUserId = SecurityUtils.currentUserId();
+        if (set.getOwnerId() != null && (currentUserId == null || !currentUserId.equals(set.getOwnerId()))) {
+            throw new BusinessException(ErrorCode.DOCUMENT_SET_VIEW_FORBIDDEN);
+        }
+        return getDocumentSet(set.getId());
     }
 
     private static String getExtension(String filename) {
@@ -218,6 +251,10 @@ public class DocumentServiceImpl implements DocumentService {
         // 防止换行/特殊字符干扰日志或展示
         name = name.replace('\r', '_').replace('\n', '_');
         return name.trim();
+    }
+
+    private static String generatePublicId() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 
 }

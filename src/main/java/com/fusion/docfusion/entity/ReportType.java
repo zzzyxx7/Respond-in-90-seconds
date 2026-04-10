@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 @Data
 public class ReportType {
     private Long id;
+    /** 对外公开使用的报表类型ID（不可预测，防枚举） */
+    private String publicId;
     private String name;
     private String description;
     private LocalDateTime createdAt;

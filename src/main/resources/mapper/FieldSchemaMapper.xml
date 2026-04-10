@@ -6,6 +6,7 @@
 
     <resultMap id="FieldSchemaResultMap" type="com.fusion.docfusion.entity.FieldSchema">
         <id property="id" column="id"/>
+        <result property="publicId" column="public_id"/>
         <result property="code" column="code"/>
         <result property="displayName" column="display_name"/>
         <result property="dataType" column="data_type"/>
@@ -16,12 +17,16 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.FieldSchema"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO field_schema (code, display_name, data_type, description, enabled, created_at)
-        VALUES (#{code}, #{displayName}, #{dataType}, #{description}, #{enabled}, #{createdAt})
+        INSERT INTO field_schema (public_id, code, display_name, data_type, description, enabled, created_at)
+        VALUES (#{publicId}, #{code}, #{displayName}, #{dataType}, #{description}, #{enabled}, #{createdAt})
     </insert>
 
     <select id="selectById" resultMap="FieldSchemaResultMap">
         SELECT * FROM field_schema WHERE id = #{id}
+    </select>
+
+    <select id="selectByPublicId" resultMap="FieldSchemaResultMap">
+        SELECT * FROM field_schema WHERE public_id = #{publicId}
     </select>
 
     <select id="selectByCode" resultMap="FieldSchemaResultMap">

@@ -8,6 +8,7 @@
         <id property="id" column="id"/>
         <result property="username" column="username"/>
         <result property="password" column="password"/>
+        <result property="avatarUrl" column="avatar_url"/>
         <result property="role" column="role"/>
         <result property="createdAt" column="created_at"/>
     </resultMap>
@@ -26,9 +27,21 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.User"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO user (username, password, role, created_at)
-        VALUES (#{username}, #{password}, #{role}, #{createdAt})
+        INSERT INTO user (username, password, avatar_url, role, created_at)
+        VALUES (#{username}, #{password}, #{avatarUrl}, #{role}, #{createdAt})
     </insert>
+
+    <update id="updatePasswordById">
+        UPDATE user SET password = #{password} WHERE id = #{id}
+    </update>
+
+    <update id="updateUsernameById">
+        UPDATE user SET username = #{username} WHERE id = #{id}
+    </update>
+
+    <update id="updateAvatarUrlById">
+        UPDATE user SET avatar_url = #{avatarUrl} WHERE id = #{id}
+    </update>
 
 </mapper>
 

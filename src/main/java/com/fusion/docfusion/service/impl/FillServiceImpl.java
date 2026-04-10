@@ -25,6 +25,7 @@ import com.fusion.docfusion.service.FillService;
 import com.fusion.docfusion.security.SecurityUtils;
 import com.fusion.docfusion.util.RedisRateLimiter;
 import com.fusion.docfusion.util.FillTaskCancelService;
+import com.fusion.docfusion.util.RequestUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.AmqpTemplate;
@@ -63,16 +64,13 @@ public class FillServiceImpl implements FillService {
 
     @Override
     public Result<FillTaskVO> submitFill(FillRequest request) {
-        Long documentSetId = request.getDocumentSetId();
-        Long templateId = request.getTemplateId();
+        Long documentSetId = resolveDocumentSetId(request.getDocumentSetId(), request.getDocumentSetPublicId());
+        Long templateId = resolveTemplateId(request.getTemplateId(), request.getTemplatePublicId());
 
         Long currentUserId = SecurityUtils.currentUserId();
-        if (currentUserId == null) {
-            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录再提交填表任务");
-        }
 
         // rate limit：限制提交频率，防止滥用
-        String rateKey = "fill:submitFill:" + currentUserId;
+        String rateKey = "fill:submitFill:" + (currentUserId != null ? ("uid:" + currentUserId) : ("anon:" + RequestUtils.clientIp()));
         if (!rateLimiter.tryAcquire(rateKey, MAX_SUBMISSIONS_PER_MINUTE, RATE_LIMIT_WINDOW_MILLIS)) {
             throw new BusinessException(ErrorCode.FILL_RATE_LIMITED);
         }
@@ -81,7 +79,7 @@ public class FillServiceImpl implements FillService {
         if (set == null) {
             throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
         }
-        if (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId())) {
+        if (set.getOwnerId() != null && (currentUserId == null || !currentUserId.equals(set.getOwnerId()))) {
             throw new BusinessException(ErrorCode.DOCUMENT_SET_FORBIDDEN);
         }
         Template template = templateMapper.selectById(templateId);
@@ -94,6 +92,7 @@ public class FillServiceImpl implements FillService {
         }
 
         FillTask task = new FillTask();
+        // 允许匿名使用核心功能：未登录时 userId 为空；登录后 userId 用于隔离与历史记录
         task.setUserId(currentUserId);
         task.setDocumentSetId(documentSetId);
         task.setTemplateId(templateId);
@@ -112,42 +111,10 @@ public class FillServiceImpl implements FillService {
     }
 
     @Override
-    public Result<FillTaskVO> getTask(Long taskId) {
-        FillTask task = fillTaskMapper.selectById(taskId);
-        ensureTaskAccessible(task, ErrorCode.TASK_FORBIDDEN);
-        return Result.success(toVO(task, true));
-    }
-
-    @Override
     public Result<FillTaskVO> getTaskByPublicId(String taskPublicId) {
         FillTask task = fillTaskMapper.selectByPublicId(taskPublicId);
         ensureTaskAccessible(task, ErrorCode.TASK_FORBIDDEN);
         return Result.success(toVO(task, true));
-    }
-
-    @Override
-    public Result<FillTaskVO> rerunTask(Long taskId) {
-        FillTask task = fillTaskMapper.selectById(taskId);
-        ensureTaskAccessible(task, ErrorCode.TASK_OPERATION_FORBIDDEN);
-        int changed = fillTaskMapper.resetForRerun(
-                taskId,
-                TaskStatus.FAILED.name(),
-                TaskStatus.TIMEOUT.name(),
-                TaskStatus.PENDING.name(),
-                "人工触发重跑，等待重新处理"
-        );
-        FillTask latest = fillTaskMapper.selectById(taskId);
-        if (changed <= 0) {
-            String latestStatus = latest == null ? null : latest.getStatus();
-            if (TaskStatus.PENDING.name().equalsIgnoreCase(latestStatus)
-                    || TaskStatus.RUNNING.name().equalsIgnoreCase(latestStatus)) {
-                return Result.success(toVO(latest, true));
-            }
-            throw new BusinessException(ErrorCode.TASK_RERUN_NOT_ALLOWED);
-        }
-        cancelService.clearCancel(task.getPublicId());
-        amqpTemplate.convertAndSend(RabbitConfig.FILL_TASK_EXCHANGE, RabbitConfig.FILL_TASK_ROUTING_KEY, taskId);
-        return Result.success(toVO(latest, true));
     }
 
     @Override
@@ -172,31 +139,6 @@ public class FillServiceImpl implements FillService {
         }
         cancelService.clearCancel(task.getPublicId());
         amqpTemplate.convertAndSend(RabbitConfig.FILL_TASK_EXCHANGE, RabbitConfig.FILL_TASK_ROUTING_KEY, task.getId());
-        return Result.success(toVO(latest, true));
-    }
-
-    @Override
-    public Result<FillTaskVO> cancelTask(Long taskId) {
-        FillTask task = fillTaskMapper.selectById(taskId);
-        ensureTaskAccessible(task, ErrorCode.TASK_OPERATION_FORBIDDEN);
-        int changed = fillTaskMapper.cancelIfStatusIn(
-                taskId,
-                TaskStatus.PENDING.name(),
-                TaskStatus.RUNNING.name(),
-                TaskStatus.CANCELLED.name(),
-                "用户主动取消任务",
-                LocalDateTime.now()
-        );
-        FillTask latest = fillTaskMapper.selectById(taskId);
-        if (changed <= 0) {
-            String latestStatus = latest == null ? null : latest.getStatus();
-            if (TaskStatus.CANCELLED.name().equalsIgnoreCase(latestStatus)) {
-                return Result.success(toVO(latest, true));
-            }
-            throw new BusinessException(ErrorCode.TASK_CANCEL_NOT_ALLOWED);
-        }
-        cancelService.requestCancel(latest.getPublicId());
-        publishCancelled(latest);
         return Result.success(toVO(latest, true));
     }
 
@@ -227,14 +169,11 @@ public class FillServiceImpl implements FillService {
 
     @Override
     public Result<FillTaskVO> submitFree(FreeFillRequest request) {
-        Long documentSetId = request.getDocumentSetId();
+        Long documentSetId = resolveDocumentSetId(request.getDocumentSetId(), request.getDocumentSetPublicId());
 
         Long currentUserId = SecurityUtils.currentUserId();
-        if (currentUserId == null) {
-            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录再提交填表任务");
-        }
 
-        String rateKey = "fill:submitFree:" + currentUserId;
+        String rateKey = "fill:submitFree:" + (currentUserId != null ? ("uid:" + currentUserId) : ("anon:" + RequestUtils.clientIp()));
         if (!rateLimiter.tryAcquire(rateKey, MAX_SUBMISSIONS_PER_MINUTE, RATE_LIMIT_WINDOW_MILLIS)) {
             throw new BusinessException(ErrorCode.FILL_RATE_LIMITED);
         }
@@ -243,7 +182,7 @@ public class FillServiceImpl implements FillService {
         if (set == null) {
             throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
         }
-        if (set.getOwnerId() != null && !currentUserId.equals(set.getOwnerId())) {
+        if (set.getOwnerId() != null && (currentUserId == null || !currentUserId.equals(set.getOwnerId()))) {
             throw new BusinessException(ErrorCode.DOCUMENT_SET_FORBIDDEN);
         }
         List<Document> docs = documentMapper.selectByDocumentSetId(documentSetId);
@@ -281,7 +220,7 @@ public class FillServiceImpl implements FillService {
 
         long total = fillTaskMapper.countByConditions(currentUserId, mode, status);
         List<FillTask> tasks = fillTaskMapper.selectByConditions(currentUserId, mode, status, pageSize, offset);
-        // 列表页不附带 steps，减轻 payload；详情用 GET /tasks/{id}
+        // 列表页不附带 steps，减轻 payload；详情用 GET /tasks/public/{taskPublicId}
         List<FillTaskVO> vos = tasks.stream().map(t -> toVO(t, false)).toList();
 
         FillTaskListPageVO pageVO = new FillTaskListPageVO();
@@ -445,7 +384,12 @@ public class FillServiceImpl implements FillService {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND);
         }
         Long currentUserId = SecurityUtils.currentUserId();
-        if (currentUserId == null || (task.getUserId() != null && !currentUserId.equals(task.getUserId()))) {
+        // 匿名任务：userId 为空，允许持有 publicId 的调用方访问（用于“匿名可用核心功能”）
+        if (task.getUserId() == null) {
+            return;
+        }
+        // 登录任务：必须登录且为本人
+        if (currentUserId == null || !currentUserId.equals(task.getUserId())) {
             throw new BusinessException(forbiddenCode);
         }
     }
@@ -459,6 +403,34 @@ public class FillServiceImpl implements FillService {
                 task.getErrorMessage(),
                 task.getFinishedAt()
         ));
+    }
+
+    private Long resolveDocumentSetId(Long documentSetId, String documentSetPublicId) {
+        if (documentSetPublicId != null && !documentSetPublicId.isBlank()) {
+            DocumentSet set = documentSetMapper.selectByPublicId(documentSetPublicId);
+            if (set == null) {
+                throw new BusinessException(ErrorCode.DOCUMENT_SET_NOT_FOUND);
+            }
+            return set.getId();
+        }
+        if (documentSetId == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "documentSetId 或 documentSetPublicId 不能为空");
+        }
+        return documentSetId;
+    }
+
+    private Long resolveTemplateId(Long templateId, String templatePublicId) {
+        if (templatePublicId != null && !templatePublicId.isBlank()) {
+            Template t = templateMapper.selectByPublicId(templatePublicId);
+            if (t == null) {
+                throw new BusinessException(ErrorCode.TEMPLATE_NOT_FOUND);
+            }
+            return t.getId();
+        }
+        if (templateId == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "templateId 或 templatePublicId 不能为空");
+        }
+        return templateId;
     }
 
 }

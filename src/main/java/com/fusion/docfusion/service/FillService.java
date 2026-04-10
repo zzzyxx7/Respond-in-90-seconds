@@ -17,29 +17,17 @@ public interface FillService {
     Result<FillTaskVO> submitFill(FillRequest request);
 
     /**
-     * 查询任务状态与结果文件路径
-     */
-    Result<FillTaskVO> getTask(Long taskId);
-    /**
-     * 兼容新增：按 publicId 查询任务（用于防枚举）
+     * 按 publicId 查询任务（用于防枚举）
      */
     Result<FillTaskVO> getTaskByPublicId(String taskPublicId);
 
     /**
-     * 人工重跑入口：允许对 FAILED/TIMEOUT 任务重新投递。
-     */
-    Result<FillTaskVO> rerunTask(Long taskId);
-    /**
-     * 兼容新增：按 publicId 重跑任务
+     * 按 publicId 重跑任务（FAILED/TIMEOUT 允许重新投递）
      */
     Result<FillTaskVO> rerunTaskByPublicId(String taskPublicId);
 
     /**
-     * 取消任务：允许对 PENDING/RUNNING 任务取消。
-     */
-    Result<FillTaskVO> cancelTask(Long taskId);
-    /**
-     * 兼容新增：按 publicId 取消任务
+     * 按 publicId 取消任务（PENDING/RUNNING 允许取消）
      */
     Result<FillTaskVO> cancelTaskByPublicId(String taskPublicId);
 

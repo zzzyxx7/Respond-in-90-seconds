@@ -67,17 +67,7 @@ public class FillController {
     }
 
     /**
-     * 查询任务状态与结果文件路径
-     * GET /api/fill/tasks/{taskId}
-     */
-    @GetMapping("/tasks/{taskId}")
-    public Result<FillTaskVO> getTask(@PathVariable Long taskId) {
-        log.info("查询填表任务, taskId={}", taskId);
-        return fillService.getTask(taskId);
-    }
-
-    /**
-     * 兼容新增：按 publicId 查询任务（用于防枚举）。
+     * 按 publicId 查询任务（用于防枚举）。
      * GET /api/fill/tasks/public/{taskPublicId}
      */
     @GetMapping("/tasks/public/{taskPublicId}")
@@ -115,17 +105,7 @@ public class FillController {
     }
 
     /**
-     * 人工重跑（仅 FAILED/TIMEOUT 允许）。
-     * POST /api/fill/tasks/{taskId}/rerun
-     */
-    @PostMapping("/tasks/{taskId}/rerun")
-    public Result<FillTaskVO> rerunTask(@PathVariable Long taskId) {
-        log.info("人工重跑填表任务, taskId={}", taskId);
-        return fillService.rerunTask(taskId);
-    }
-
-    /**
-     * 兼容新增：按 publicId 人工重跑
+     * 按 publicId 人工重跑
      * POST /api/fill/tasks/public/{taskPublicId}/rerun
      */
     @PostMapping("/tasks/public/{taskPublicId}/rerun")
@@ -135,17 +115,7 @@ public class FillController {
     }
 
     /**
-     * 取消任务（仅 PENDING/RUNNING 允许）。
-     * POST /api/fill/tasks/{taskId}/cancel
-     */
-    @PostMapping("/tasks/{taskId}/cancel")
-    public Result<FillTaskVO> cancelTask(@PathVariable Long taskId) {
-        log.info("取消填表任务, taskId={}", taskId);
-        return fillService.cancelTask(taskId);
-    }
-
-    /**
-     * 兼容新增：按 publicId 取消任务
+     * 按 publicId 取消任务
      * POST /api/fill/tasks/public/{taskPublicId}/cancel
      */
     @PostMapping("/tasks/public/{taskPublicId}/cancel")
@@ -168,77 +138,7 @@ public class FillController {
     }
 
     /**
-     * 下载填表结果文件
-     * GET /api/fill/download/{taskId}
-     */
-    @GetMapping("/download/{taskId}")
-    public void downloadResult(@PathVariable Long taskId, HttpServletResponse response) {
-        log.info("下载填表结果, taskId={}", taskId);
-        FillTaskVO task = fillService.getTask(taskId).getData();
-        if (task == null || !TaskStatus.SUCCESS.name().equals(task.getStatus()) || task.getResultFilePath() == null) {
-            log.warn("下载失败：任务未成功或无结果文件, taskId={}, status={}, resultFilePath={}",
-                    taskId, task == null ? null : task.getStatus(), task == null ? null : task.getResultFilePath());
-            response.setStatus(404);
-            return;
-        }
-        Path resultsDir = Paths.get(uploadProperties.getResultsDir());
-        Path normalizedResultsDir = resultsDir.normalize();
-        Path filePath = resultsDir.resolve(task.getResultFilePath()).normalize();
-        // 防止路径穿越（即使 task.resultFilePath 理论上是后端生成的，也做兜底校验）
-        if (!filePath.startsWith(normalizedResultsDir)) {
-            log.warn("下载失败：结果文件落点不在结果目录内, taskId={}, path={}",
-                    taskId, filePath);
-            response.setStatus(404);
-            return;
-        }
-        try {
-            Resource resource = new UrlResource(filePath.toUri());
-            if (!resource.exists() || !resource.isReadable()) {
-                log.warn("下载失败：文件不存在或不可读, taskId={}, path={}", taskId, filePath);
-                response.setStatus(404);
-                return;
-            }
-            String resultFilePath = task.getResultFilePath();
-            String filename = resultFilePath;
-            // 兼容 '/' 和 '\'
-            int lastSlash = filename.lastIndexOf('/');
-            int lastBackslash = filename.lastIndexOf('\\');
-            int idx = Math.max(lastSlash, lastBackslash);
-            if (idx >= 0) filename = filename.substring(idx + 1);
-
-            // 按文件扩展名返回更准确的 Content-Type，提升 Apifox“保存为文件”的扩展名识别成功率。
-            // 同时仍是下载 attachment，避免被当文本预览。
-            String contentType = resolveContentTypeByFilename(resultFilePath);
-
-            // 优先使用用户上传时的模板名/文档集名构造下载名；同时保留 ASCII 兜底名兼容部分客户端。
-            String preferredFilename = buildPreferredFilename(task, filename);
-            String asciiFilename = buildAsciiFilename(taskId, filename);
-            String encodedPreferred = URLEncoder.encode(preferredFilename, StandardCharsets.UTF_8)
-                    .replace("+", "%20");
-            String simpleContentDisposition = "attachment; filename=\"" + asciiFilename + "\"; " +
-                    "filename*=UTF-8''" + encodedPreferred;
-            response.setStatus(200);
-            response.setContentType(contentType);
-            response.setHeader(HttpHeaders.CONTENT_DISPOSITION, simpleContentDisposition);
-
-            long contentLength = resource.contentLength();
-            if (contentLength >= 0) {
-                response.setContentLengthLong(contentLength);
-            }
-
-            try (InputStream in = resource.getInputStream();
-                 OutputStream out = response.getOutputStream()) {
-                in.transferTo(out);
-                out.flush();
-            }
-        } catch (Exception e) {
-            log.error("下载失败：异常, taskId={}", taskId, e);
-            response.setStatus(404);
-        }
-    }
-
-    /**
-     * 兼容新增：按 publicId 下载填表结果
+     * 按 publicId 下载填表结果
      * GET /api/fill/download/public/{taskPublicId}
      */
     @GetMapping("/download/public/{taskPublicId}")
@@ -321,20 +221,6 @@ public class FillController {
             return "application/json; charset=utf-8";
         }
         return "application/octet-stream";
-    }
-
-    private static String buildAsciiFilename(Long taskId, String rawFilename) {
-        String name = rawFilename == null ? "" : rawFilename;
-        // 提取扩展名（包含点），没有就用 .bin
-        String lower = name.toLowerCase();
-        int dot = lower.lastIndexOf('.');
-        String ext = dot >= 0 ? name.substring(dot) : ".bin";
-        // 强制扩展名合法字符集
-        ext = ext.replaceAll("[^a-zA-Z0-9\\.]", "");
-        if (ext.isBlank()) {
-            ext = ".bin";
-        }
-        return "fill_" + taskId + ext;
     }
 
     private static String buildAsciiFilename(String taskPublicId, String rawFilename) {

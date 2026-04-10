@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 public class FieldSchema {
 
     private Long id;
+    /** 对外公开使用的字段ID（不可预测，防枚举） */
+    private String publicId;
 
     /**
      * 字段编码，例如 student_name, amount

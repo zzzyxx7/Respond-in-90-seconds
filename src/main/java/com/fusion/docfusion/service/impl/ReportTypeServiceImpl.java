@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +28,7 @@ public class ReportTypeServiceImpl implements ReportTypeService {
             throw new BusinessException(ErrorCode.REPORT_TYPE_NAME_EMPTY);
         }
         ReportType entity = new ReportType();
+        entity.setPublicId(generatePublicId());
         entity.setName(vo.getName().trim());
         entity.setDescription(vo.getDescription());
         entity.setCreatedAt(LocalDateTime.now());
@@ -44,8 +46,11 @@ public class ReportTypeServiceImpl implements ReportTypeService {
     }
 
     @Override
-    public Result<ReportTypeVO> getById(Long id) {
-        ReportType entity = reportTypeMapper.selectById(id);
+    public Result<ReportTypeVO> getByPublicId(String publicId) {
+        if (publicId == null || publicId.isBlank()) {
+            throw new BusinessException(ErrorCode.REPORT_TYPE_PUBLIC_ID_INVALID);
+        }
+        ReportType entity = reportTypeMapper.selectByPublicId(publicId);
         if (entity == null) {
             throw new BusinessException(ErrorCode.REPORT_TYPE_NOT_FOUND);
         }
@@ -79,10 +84,15 @@ public class ReportTypeServiceImpl implements ReportTypeService {
     private ReportTypeVO toVO(ReportType entity) {
         ReportTypeVO vo = new ReportTypeVO();
         vo.setId(entity.getId());
+        vo.setPublicId(entity.getPublicId());
         vo.setName(entity.getName());
         vo.setDescription(entity.getDescription());
         vo.setCreatedAt(entity.getCreatedAt());
         return vo;
+    }
+
+    private static String generatePublicId() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 }
 

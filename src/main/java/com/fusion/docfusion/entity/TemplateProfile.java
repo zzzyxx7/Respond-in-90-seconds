@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 @Data
 public class TemplateProfile {
     private Long id;
+    /** 对外公开使用的模板档案ID（不可预测，防枚举） */
+    private String publicId;
     private Long templateId;
     /**
      * 模板档案内容，通常为 JSON 字符串

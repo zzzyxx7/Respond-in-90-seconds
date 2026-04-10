@@ -17,6 +17,8 @@ public interface ReportTypeMapper {
 
     ReportType selectById(@Param("id") Long id);
 
+    ReportType selectByPublicId(@Param("publicId") String publicId);
+
     List<ReportType> selectAll();
 }
 

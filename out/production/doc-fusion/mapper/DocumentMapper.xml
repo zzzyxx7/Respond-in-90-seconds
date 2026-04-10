@@ -6,6 +6,7 @@
 
     <resultMap id="DocumentResultMap" type="com.fusion.docfusion.entity.Document">
         <id property="id" column="id"/>
+        <result property="publicId" column="public_id"/>
         <result property="documentSetId" column="document_set_id"/>
         <result property="fileName" column="file_name"/>
         <result property="fileType" column="file_type"/>
@@ -16,8 +17,8 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.Document"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO document (document_set_id, file_name, file_type, file_path, file_size, created_at)
-        VALUES (#{documentSetId}, #{fileName}, #{fileType}, #{filePath}, #{fileSize}, #{createdAt})
+        INSERT INTO document (public_id, document_set_id, file_name, file_type, file_path, file_size, created_at)
+        VALUES (#{publicId}, #{documentSetId}, #{fileName}, #{fileType}, #{filePath}, #{fileSize}, #{createdAt})
     </insert>
 
     <select id="selectByDocumentSetId" resultMap="DocumentResultMap">
@@ -26,5 +27,9 @@
 
     <select id="selectById" resultMap="DocumentResultMap">
         SELECT * FROM document WHERE id = #{id}
+    </select>
+
+    <select id="selectByPublicId" resultMap="DocumentResultMap">
+        SELECT * FROM document WHERE public_id = #{publicId}
     </select>
 </mapper>

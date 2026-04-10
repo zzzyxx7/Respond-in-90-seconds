@@ -29,8 +29,15 @@ public interface DocumentService {
      */
     Result<Boolean> deleteDocumentSet(Long documentSetId);
 
+    Result<Boolean> deleteDocumentSetByPublicId(String documentSetPublicId);
+
     /**
      * 查询文档集详情（含文档列表）
      */
     Result<DocumentSetVO> getDocumentSet(Long documentSetId);
+
+    /**
+     * 按 publicId 查询文档集详情（用于防枚举/匿名场景）。
+     */
+    Result<DocumentSetVO> getDocumentSetByPublicId(String documentSetPublicId);
 }

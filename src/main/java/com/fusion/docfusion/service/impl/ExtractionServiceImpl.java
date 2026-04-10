@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -94,6 +95,7 @@ public class ExtractionServiceImpl implements ExtractionService {
                 continue;
             }
             ExtractedValue ev = new ExtractedValue();
+            ev.setPublicId(generatePublicId());
             ev.setDocumentId(documentId);
             ev.setFieldSchemaId(schema.getId());
             ev.setFieldValue(value);
@@ -109,6 +111,10 @@ public class ExtractionServiceImpl implements ExtractionService {
         } else {
             log.warn("没有可保存的抽取结果，documentId={}", documentId);
         }
+    }
+
+    private static String generatePublicId() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 }
 

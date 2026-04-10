@@ -17,7 +17,7 @@ public interface TemplateService {
 
     Result<List<TemplateVO>> listByReportType(Long reportTypeId);
 
-    Result<TemplateVO> getById(Long templateId);
+    Result<TemplateVO> getByPublicId(String templatePublicId);
 
     Result<TemplateVO> updateTemplate(Long templateId, TemplateVO vo);
 

@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 @Data
 public class TemplateVO {
     private Long id;
+    private String publicId;
     /** 所属报表类型ID，可为空 */
     private Long reportTypeId;
     private String fileName;

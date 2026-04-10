@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 @Data
 public class ReportTypeVO {
     private Long id;
+    private String publicId;
     private String name;
     private String description;
     private LocalDateTime createdAt;

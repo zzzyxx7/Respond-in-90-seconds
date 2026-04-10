@@ -10,6 +10,7 @@ import java.util.List;
 public interface TemplateMapper {
     int insert(Template entity);
     Template selectById(@Param("id") Long id);
+    Template selectByPublicId(@Param("publicId") String publicId);
     List<Template> selectAll();
 
     List<Template> selectAllByOwner(@Param("ownerId") Long ownerId);

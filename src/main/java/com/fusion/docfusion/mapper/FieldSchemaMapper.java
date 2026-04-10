@@ -13,6 +13,8 @@ public interface FieldSchemaMapper {
 
     FieldSchema selectById(@Param("id") Long id);
 
+    FieldSchema selectByPublicId(@Param("publicId") String publicId);
+
     FieldSchema selectByCode(@Param("code") String code);
 
     List<FieldSchema> selectAll();

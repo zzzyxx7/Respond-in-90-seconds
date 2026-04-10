@@ -6,6 +6,7 @@
 
     <resultMap id="DocumentSetResultMap" type="com.fusion.docfusion.entity.DocumentSet">
         <id property="id" column="id"/>
+        <result property="publicId" column="public_id"/>
         <result property="ownerId" column="owner_id"/>
         <result property="name" column="name"/>
         <result property="createdAt" column="created_at"/>
@@ -13,12 +14,16 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.DocumentSet"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO document_set (owner_id, name, created_at)
-        VALUES (#{ownerId}, #{name}, #{createdAt})
+        INSERT INTO document_set (public_id, owner_id, name, created_at)
+        VALUES (#{publicId}, #{ownerId}, #{name}, #{createdAt})
     </insert>
 
     <select id="selectById" resultMap="DocumentSetResultMap">
         SELECT * FROM document_set WHERE id = #{id}
+    </select>
+
+    <select id="selectByPublicId" resultMap="DocumentSetResultMap">
+        SELECT * FROM document_set WHERE public_id = #{publicId}
     </select>
 
     <delete id="deleteById">
@@ -27,12 +32,13 @@
 
     <resultMap id="DocumentSetListItemResultMap" type="com.fusion.docfusion.dto.DocumentSetListItemVO">
         <id property="id" column="id"/>
+        <result property="publicId" column="public_id"/>
         <result property="name" column="name"/>
         <result property="createdAt" column="created_at"/>
         <result property="documentCount" column="document_count"/>
     </resultMap>
     <select id="selectAllForList" resultMap="DocumentSetListItemResultMap">
-        SELECT ds.id, ds.name, ds.created_at,
+        SELECT ds.id, ds.public_id, ds.name, ds.created_at,
                (SELECT COUNT(*) FROM document d WHERE d.document_set_id = ds.id) AS document_count
         FROM document_set ds
         WHERE ds.owner_id = #{ownerId}

@@ -7,6 +7,7 @@ import com.fusion.docfusion.service.TemplateService;
 import com.fusion.docfusion.service.TemplateProfileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -24,8 +25,8 @@ public class TemplateController {
     private final TemplateService templateService;
     private final TemplateProfileService templateProfileService;
 
-    @PostMapping("/upload")
-    public Result<TemplateVO> uploadTemplate(@RequestParam("file") MultipartFile file) {
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<TemplateVO> uploadTemplate(@RequestPart("file") MultipartFile file) {
         log.info("上传模板请求, filename={}, size={}", file == null ? null : file.getOriginalFilename(), file == null ? null : file.getSize());
         return templateService.uploadTemplate(file);
     }
@@ -46,55 +47,75 @@ public class TemplateController {
         return templateService.listByReportType(reportTypeId);
     }
 
-    @GetMapping("/{templateId}")
-    public Result<TemplateVO> getById(@PathVariable Long templateId) {
-        log.info("查询模板详情, templateId={}", templateId);
-        return templateService.getById(templateId);
+    /**
+     * 按 publicId 查询模板详情（用于防枚举/匿名场景）。
+     * GET /api/templates/public/{templatePublicId}
+     */
+    @GetMapping("/public/{templatePublicId}")
+    public Result<TemplateVO> getByPublicId(@PathVariable String templatePublicId) {
+        log.info("查询模板详情(公共ID), templatePublicId={}", templatePublicId);
+        return templateService.getByPublicId(templatePublicId);
     }
 
     /**
      * 更新模板基本信息（目前支持：展示名、所属报表类型）
-     * PUT /api/templates/{templateId}
+     * PUT /api/templates/public/{templatePublicId}
      */
-    @PutMapping("/{templateId}")
-    public Result<TemplateVO> updateTemplate(@PathVariable Long templateId,
-                                             @RequestBody TemplateVO vo) {
-        log.info("更新模板, templateId={}", templateId);
-        return templateService.updateTemplate(templateId, vo);
+    @PutMapping("/public/{templatePublicId}")
+    public Result<TemplateVO> updateTemplateByPublicId(@PathVariable String templatePublicId,
+                                                         @RequestBody TemplateVO vo) {
+        log.info("更新模板(公共ID), templatePublicId={}", templatePublicId);
+        TemplateVO tpl = templateService.getByPublicId(templatePublicId).getData();
+        if (tpl == null || tpl.getId() == null) {
+            return templateService.getByPublicId(templatePublicId);
+        }
+        return templateService.updateTemplate(tpl.getId(), vo);
     }
 
     /**
      * 删除模板
-     * DELETE /api/templates/{templateId}
+     * DELETE /api/templates/public/{templatePublicId}
      */
-    @DeleteMapping("/{templateId}")
-    public Result<Boolean> deleteTemplate(@PathVariable Long templateId) {
-        log.info("删除模板, templateId={}", templateId);
-        return templateService.deleteTemplate(templateId);
+    @DeleteMapping("/public/{templatePublicId}")
+    public Result<Boolean> deleteTemplateByPublicId(@PathVariable String templatePublicId) {
+        log.info("删除模板(公共ID), templatePublicId={}", templatePublicId);
+        TemplateVO tpl = templateService.getByPublicId(templatePublicId).getData();
+        if (tpl == null || tpl.getId() == null) {
+            return Result.success(false);
+        }
+        return templateService.deleteTemplate(tpl.getId());
     }
 
     /**
-     * 保存或更新模板档案配置（如 report_profile.json）
-     * POST /api/templates/{templateId}/profile
+     * 保存或更新模板档案配置
+     * POST /api/templates/public/{templatePublicId}/profile
      */
-    @PostMapping("/{templateId}/profile")
-    public Result<TemplateProfileVO> saveProfile(@PathVariable Long templateId,
-                                                 @RequestBody TemplateProfileVO vo) {
-        log.info("保存模板档案配置, templateId={}", templateId);
+    @PostMapping("/public/{templatePublicId}/profile")
+    public Result<TemplateProfileVO> saveProfileByPublicId(@PathVariable String templatePublicId,
+                                                           @RequestBody TemplateProfileVO vo) {
+        log.info("保存模板档案配置(公共ID), templatePublicId={}", templatePublicId);
+        TemplateVO tpl = templateService.getByPublicId(templatePublicId).getData();
+        if (tpl == null || tpl.getId() == null) {
+            return Result.success(null);
+        }
         if (vo == null) {
             vo = new TemplateProfileVO();
         }
-        vo.setTemplateId(templateId);
+        vo.setTemplateId(tpl.getId());
         return templateProfileService.saveOrUpdate(vo);
     }
 
     /**
      * 查询模板档案配置
-     * GET /api/templates/{templateId}/profile
+     * GET /api/templates/public/{templatePublicId}/profile
      */
-    @GetMapping("/{templateId}/profile")
-    public Result<TemplateProfileVO> getProfile(@PathVariable Long templateId) {
-        log.info("查询模板档案配置, templateId={}", templateId);
-        return templateProfileService.getByTemplateId(templateId);
+    @GetMapping("/public/{templatePublicId}/profile")
+    public Result<TemplateProfileVO> getProfileByPublicId(@PathVariable String templatePublicId) {
+        log.info("查询模板档案配置(公共ID), templatePublicId={}", templatePublicId);
+        TemplateVO tpl = templateService.getByPublicId(templatePublicId).getData();
+        if (tpl == null || tpl.getId() == null) {
+            return Result.success(null);
+        }
+        return templateProfileService.getByTemplateId(tpl.getId());
     }
 }

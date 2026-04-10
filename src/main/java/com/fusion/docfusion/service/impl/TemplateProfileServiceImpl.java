@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +42,7 @@ public class TemplateProfileServiceImpl implements TemplateProfileService {
         LocalDateTime now = LocalDateTime.now();
         if (existing == null) {
             TemplateProfile entity = new TemplateProfile();
+            entity.setPublicId(generatePublicId());
             entity.setTemplateId(vo.getTemplateId());
             entity.setContent(vo.getContent());
             entity.setCreatedAt(now);
@@ -69,11 +71,16 @@ public class TemplateProfileServiceImpl implements TemplateProfileService {
 
     private TemplateProfileVO toVO(TemplateProfile entity) {
         TemplateProfileVO vo = new TemplateProfileVO();
+        vo.setPublicId(entity.getPublicId());
         vo.setTemplateId(entity.getTemplateId());
         vo.setContent(entity.getContent());
         vo.setCreatedAt(entity.getCreatedAt());
         vo.setUpdatedAt(entity.getUpdatedAt());
         return vo;
+    }
+
+    private static String generatePublicId() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 }
 

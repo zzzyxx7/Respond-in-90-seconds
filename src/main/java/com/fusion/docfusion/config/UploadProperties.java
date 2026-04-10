@@ -12,4 +12,5 @@ public class UploadProperties {
     private String docsDir;
     private String templatesDir;
     private String resultsDir;
+    private String avatarsDir;
 }

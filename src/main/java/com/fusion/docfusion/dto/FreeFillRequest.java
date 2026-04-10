@@ -1,7 +1,6 @@
 package com.fusion.docfusion.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
@@ -10,9 +9,10 @@ import lombok.Data;
 @Data
 public class FreeFillRequest {
 
-    /** 当前使用的文档集 ID（上传文档后返回） */
-    @NotNull(message = "文档集ID不能为空")
+    /** 当前使用的文档集 ID（兼容旧参数）。建议优先使用 documentSetPublicId。 */
     private Long documentSetId;
+    /** 当前使用的文档集 publicId（推荐，防枚举）。 */
+    private String documentSetPublicId;
 
     /**
      * 用户的自然语言需求描述，例如：

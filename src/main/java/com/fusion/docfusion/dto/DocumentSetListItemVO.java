@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 @Data
 public class DocumentSetListItemVO {
     private Long id;
+    private String publicId;
     private String name;
     private LocalDateTime createdAt;
     private Integer documentCount;

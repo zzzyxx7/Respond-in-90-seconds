@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 public class TemplateField {
 
     private Long id;
+    /** 对外公开使用的模板字段映射ID（不可预测，防枚举） */
+    private String publicId;
 
     private Long templateId;
 

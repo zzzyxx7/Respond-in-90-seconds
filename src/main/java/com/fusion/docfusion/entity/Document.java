@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 @Data
 public class Document {
     private Long id;
+    /** 对外公开使用的文档ID（不可预测，防枚举） */
+    private String publicId;
     private Long documentSetId;
     /** 文件名，如 report.docx */
     private String fileName;

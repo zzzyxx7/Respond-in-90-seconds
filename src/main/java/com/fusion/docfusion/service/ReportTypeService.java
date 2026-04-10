@@ -11,7 +11,7 @@ public interface ReportTypeService {
 
     Result<List<ReportTypeVO>> listAll();
 
-    Result<ReportTypeVO> getById(Long id);
+    Result<ReportTypeVO> getByPublicId(String publicId);
 
     Result<ReportTypeVO> update(Long id, ReportTypeVO vo);
 

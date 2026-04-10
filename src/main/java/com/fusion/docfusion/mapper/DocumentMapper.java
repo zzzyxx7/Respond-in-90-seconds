@@ -11,4 +11,5 @@ public interface DocumentMapper {
     int insert(Document entity);
     List<Document> selectByDocumentSetId(@Param("documentSetId") Long documentSetId);
     Document selectById(@Param("id") Long id);
+    Document selectByPublicId(@Param("publicId") String publicId);
 }

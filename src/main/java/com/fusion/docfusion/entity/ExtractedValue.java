@@ -12,6 +12,8 @@ import java.time.LocalDateTime;
 public class ExtractedValue {
 
     private Long id;
+    /** 对外公开使用的抽取结果ID（不可预测，防枚举） */
+    private String publicId;
 
     private Long documentId;
 

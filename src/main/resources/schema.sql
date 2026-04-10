@@ -14,9 +14,11 @@ USE mydatabase;
  ******************************/
 CREATE TABLE IF NOT EXISTS document_set (
                                             id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '文档集ID',
+                                            public_id VARCHAR(64) DEFAULT NULL COMMENT '对外文档集ID（不可预测，防枚举）',
                                             owner_id BIGINT DEFAULT NULL COMMENT '创建该文档集的用户ID',
                                             name VARCHAR(255) NOT NULL COMMENT '文档集名称/描述，例如：官方测试集1',
                                             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                            UNIQUE KEY uk_document_set_public_id (public_id),
                                             INDEX idx_document_set_owner_id (owner_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     COMMENT='文档集：一次批量上传的文档集合';
@@ -52,6 +54,7 @@ CREATE TABLE IF NOT EXISTS `user` (
                                     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',
                                     username VARCHAR(100) NOT NULL UNIQUE COMMENT '用户名',
                                     password VARCHAR(255) NOT NULL COMMENT 'BCrypt 加密后的密码',
+                                    avatar_url VARCHAR(512) DEFAULT NULL COMMENT '头像URL（可为空）',
                                     role VARCHAR(50) NOT NULL DEFAULT 'USER' COMMENT '角色：USER/ADMIN',
                                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -64,9 +67,11 @@ CREATE TABLE IF NOT EXISTS `user` (
  ******************************/
 CREATE TABLE IF NOT EXISTS report_type (
                                            id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '报表类型ID',
+                                           public_id VARCHAR(64) DEFAULT NULL COMMENT '对外报表类型ID（不可预测，防枚举）',
                                            name VARCHAR(255) NOT NULL COMMENT '报表类型名称，例如 合同收支汇总表',
                                            description VARCHAR(512) DEFAULT NULL COMMENT '报表类型说明，例如 适用于年度合同统计',
-                                           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+                                           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                           UNIQUE KEY uk_report_type_public_id (public_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     COMMENT='报表类型：描述业务上的报表类别，例如合同汇总表、员工信息表';
 
@@ -78,6 +83,7 @@ CREATE TABLE IF NOT EXISTS report_type (
  ******************************/
 CREATE TABLE IF NOT EXISTS template (
                                         id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '模板ID',
+                                        public_id VARCHAR(64) DEFAULT NULL COMMENT '对外模板ID（不可预测，防枚举）',
                                         owner_id BIGINT DEFAULT NULL COMMENT '创建该模板的用户ID',
                                         report_type_id BIGINT DEFAULT NULL COMMENT '所属报表类型ID，可为空表示未分类',
                                         file_name VARCHAR(255) NOT NULL COMMENT '模板文件名，例如 template1.xlsx',
@@ -85,6 +91,7 @@ CREATE TABLE IF NOT EXISTS template (
                                         file_path VARCHAR(512) NOT NULL COMMENT '模板文件在服务器上的路径',
                                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
 
+                                        UNIQUE KEY uk_template_public_id (public_id),
                                         INDEX idx_template_owner_id (owner_id),
                                         INDEX idx_template_report_type_id (report_type_id),
                                         CONSTRAINT fk_template_report_type
@@ -189,12 +196,14 @@ CREATE TABLE IF NOT EXISTS template_profile (
  ******************************/
 CREATE TABLE IF NOT EXISTS field_schema (
                                             id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '字段定义ID',
+                                            public_id VARCHAR(64) DEFAULT NULL COMMENT '对外字段ID（不可预测，防枚举）',
                                             code VARCHAR(100) NOT NULL UNIQUE COMMENT '字段编码，如 student_name, amount',
                                             display_name VARCHAR(255) NOT NULL COMMENT '字段中文名，例如 学生姓名、金额',
                                             data_type VARCHAR(50) NOT NULL COMMENT '数据类型：string/number/date 等',
                                             description VARCHAR(512) DEFAULT NULL COMMENT '字段含义说明',
                                             enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
-                                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+                                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                            UNIQUE KEY uk_field_schema_public_id (public_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     COMMENT='字段定义：描述可抽取的业务字段';
 
@@ -208,11 +217,13 @@ CREATE TABLE IF NOT EXISTS field_schema (
  ******************************/
 CREATE TABLE IF NOT EXISTS template_field (
                                               id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '模板字段ID',
+                                              public_id VARCHAR(64) DEFAULT NULL COMMENT '对外模板字段映射ID（不可预测，防枚举）',
                                               template_id BIGINT NOT NULL COMMENT '所属模板ID',
                                               field_schema_id BIGINT NOT NULL COMMENT '对应的字段定义ID',
                                               location VARCHAR(100) NOT NULL COMMENT '模板中的位置，如 A3/B5 或 {{student_name}}',
                                               format VARCHAR(100) DEFAULT NULL COMMENT '展示格式（如金额两位小数、日期格式等）',
                                               created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                              UNIQUE KEY uk_template_field_public_id (public_id),
 
                                               INDEX idx_template_field_template_id (template_id),
                                               INDEX idx_template_field_field_schema_id (field_schema_id),
@@ -236,11 +247,13 @@ CREATE TABLE IF NOT EXISTS template_field (
  ******************************/
 CREATE TABLE IF NOT EXISTS extracted_value (
                                                id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '抽取结果ID',
+                                               public_id VARCHAR(64) DEFAULT NULL COMMENT '对外抽取结果ID（不可预测，防枚举）',
                                                document_id BIGINT NOT NULL COMMENT '来源文档ID',
                                                field_schema_id BIGINT NOT NULL COMMENT '字段定义ID',
                                                field_value TEXT NOT NULL COMMENT '抽取到的字段值（字符串形式）',
                                                confidence DECIMAL(5,4) DEFAULT NULL COMMENT '置信度 0~1，例如 0.9234',
                                                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                               UNIQUE KEY uk_extracted_value_public_id (public_id),
 
                                                INDEX idx_extracted_document_id (document_id),
                                                INDEX idx_extracted_field_schema_id (field_schema_id),
@@ -271,3 +284,110 @@ ALTER TABLE fill_task
 
 ALTER TABLE fill_task
     ADD UNIQUE INDEX IF NOT EXISTS uk_fill_task_public_id (public_id);
+
+/******************************
+ * 13. 兼容升级（已有库执行）
+ * 为 document_set 增加 public_id 防止对外枚举文档集ID
+ ******************************/
+ALTER TABLE document_set
+    ADD COLUMN IF NOT EXISTS public_id VARCHAR(64) NULL COMMENT '对外文档集ID（不可预测，防枚举）' AFTER id;
+
+UPDATE document_set
+SET public_id = REPLACE(UUID(), '-', '')
+WHERE public_id IS NULL OR public_id = '';
+
+ALTER TABLE document_set
+    MODIFY COLUMN public_id VARCHAR(64) NOT NULL;
+
+ALTER TABLE document_set
+    ADD UNIQUE INDEX IF NOT EXISTS uk_document_set_public_id (public_id);
+
+/******************************
+ * 14. 兼容升级（已有库执行）
+ * 为 template 增加 public_id 防止对外枚举模板ID
+ ******************************/
+ALTER TABLE template
+    ADD COLUMN IF NOT EXISTS public_id VARCHAR(64) NULL COMMENT '对外模板ID（不可预测，防枚举）' AFTER id;
+
+UPDATE template
+SET public_id = REPLACE(UUID(), '-', '')
+WHERE public_id IS NULL OR public_id = '';
+
+ALTER TABLE template
+    MODIFY COLUMN public_id VARCHAR(64) NOT NULL;
+
+ALTER TABLE template
+    ADD UNIQUE INDEX IF NOT EXISTS uk_template_public_id (public_id);
+
+/******************************
+ * 15. 兼容升级（已有库执行）
+ * 为 report_type 增加 public_id 防止对外枚举报表类型ID
+ ******************************/
+ALTER TABLE report_type
+    ADD COLUMN IF NOT EXISTS public_id VARCHAR(64) NULL COMMENT '对外报表类型ID（不可预测，防枚举）' AFTER id;
+
+UPDATE report_type
+SET public_id = REPLACE(UUID(), '-', '')
+WHERE public_id IS NULL OR public_id = '';
+
+ALTER TABLE report_type
+    MODIFY COLUMN public_id VARCHAR(64) NOT NULL;
+
+ALTER TABLE report_type
+    ADD UNIQUE INDEX IF NOT EXISTS uk_report_type_public_id (public_id);
+
+/******************************
+ * 16. 兼容升级（已有库执行）
+ * 为 field_schema 增加 public_id
+ ******************************/
+ALTER TABLE field_schema
+    ADD COLUMN IF NOT EXISTS public_id VARCHAR(64) NULL COMMENT '对外字段ID（不可预测，防枚举）' AFTER id;
+UPDATE field_schema
+SET public_id = REPLACE(UUID(), '-', '')
+WHERE public_id IS NULL OR public_id = '';
+ALTER TABLE field_schema
+    MODIFY COLUMN public_id VARCHAR(64) NOT NULL;
+ALTER TABLE field_schema
+    ADD UNIQUE INDEX IF NOT EXISTS uk_field_schema_public_id (public_id);
+
+/******************************
+ * 17. 兼容升级（已有库执行）
+ * 为 template_field 增加 public_id
+ ******************************/
+ALTER TABLE template_field
+    ADD COLUMN IF NOT EXISTS public_id VARCHAR(64) NULL COMMENT '对外模板字段映射ID（不可预测，防枚举）' AFTER id;
+UPDATE template_field
+SET public_id = REPLACE(UUID(), '-', '')
+WHERE public_id IS NULL OR public_id = '';
+ALTER TABLE template_field
+    MODIFY COLUMN public_id VARCHAR(64) NOT NULL;
+ALTER TABLE template_field
+    ADD UNIQUE INDEX IF NOT EXISTS uk_template_field_public_id (public_id);
+
+/******************************
+ * 18. 兼容升级（已有库执行）
+ * 为 template_profile 增加 public_id
+ ******************************/
+ALTER TABLE template_profile
+    ADD COLUMN IF NOT EXISTS public_id VARCHAR(64) NULL COMMENT '对外模板档案ID（不可预测，防枚举）' AFTER id;
+UPDATE template_profile
+SET public_id = REPLACE(UUID(), '-', '')
+WHERE public_id IS NULL OR public_id = '';
+ALTER TABLE template_profile
+    MODIFY COLUMN public_id VARCHAR(64) NOT NULL;
+ALTER TABLE template_profile
+    ADD UNIQUE INDEX IF NOT EXISTS uk_template_profile_public_id (public_id);
+
+/******************************
+ * 19. 兼容升级（已有库执行）
+ * 为 extracted_value 增加 public_id
+ ******************************/
+ALTER TABLE extracted_value
+    ADD COLUMN IF NOT EXISTS public_id VARCHAR(64) NULL COMMENT '对外抽取结果ID（不可预测，防枚举）' AFTER id;
+UPDATE extracted_value
+SET public_id = REPLACE(UUID(), '-', '')
+WHERE public_id IS NULL OR public_id = '';
+ALTER TABLE extracted_value
+    MODIFY COLUMN public_id VARCHAR(64) NOT NULL;
+ALTER TABLE extracted_value
+    ADD UNIQUE INDEX IF NOT EXISTS uk_extracted_value_public_id (public_id);

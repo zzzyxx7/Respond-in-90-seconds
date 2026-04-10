@@ -6,6 +6,7 @@
 
     <resultMap id="TemplateResultMap" type="com.fusion.docfusion.entity.Template">
         <id property="id" column="id"/>
+        <result property="publicId" column="public_id"/>
         <result property="ownerId" column="owner_id"/>
         <result property="reportTypeId" column="report_type_id"/>
         <result property="fileName" column="file_name"/>
@@ -16,12 +17,16 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.Template"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO template (owner_id, report_type_id, file_name, file_type, file_path, created_at)
-        VALUES (#{ownerId}, #{reportTypeId}, #{fileName}, #{fileType}, #{filePath}, #{createdAt})
+        INSERT INTO template (public_id, owner_id, report_type_id, file_name, file_type, file_path, created_at)
+        VALUES (#{publicId}, #{ownerId}, #{reportTypeId}, #{fileName}, #{fileType}, #{filePath}, #{createdAt})
     </insert>
 
     <select id="selectById" resultMap="TemplateResultMap">
         SELECT * FROM template WHERE id = #{id}
+    </select>
+
+    <select id="selectByPublicId" resultMap="TemplateResultMap">
+        SELECT * FROM template WHERE public_id = #{publicId}
     </select>
 
     <select id="selectAll" resultMap="TemplateResultMap">

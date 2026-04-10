@@ -8,6 +8,7 @@ import java.util.List;
 @Data
 public class DocumentSetVO {
     private Long id;
+    private String publicId;
     private String name;
     private LocalDateTime createdAt;
     private List<DocumentVO> documents;

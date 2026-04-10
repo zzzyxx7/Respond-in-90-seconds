@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +33,7 @@ public class FieldSchemaServiceImpl implements FieldSchemaService {
             schema.setEnabled(true);
         }
         schema.setId(null);
+        schema.setPublicId(generatePublicId());
         schema.setCreatedAt(LocalDateTime.now());
         fieldSchemaMapper.insert(schema);
         return schema;
@@ -40,5 +42,9 @@ public class FieldSchemaServiceImpl implements FieldSchemaService {
     @Override
     public List<FieldSchema> listAll() {
         return fieldSchemaMapper.selectAll();
+    }
+
+    private static String generatePublicId() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 }

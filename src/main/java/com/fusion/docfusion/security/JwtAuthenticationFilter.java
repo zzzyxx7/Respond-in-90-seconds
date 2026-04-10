@@ -42,8 +42,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String uri = request.getRequestURI();
-        // 仅放行登录接口（不校验 JWT）；/api/dev 需携带 JWT 且为 ADMIN
-        if (uri.startsWith("/api/auth/")) {
+        String method = request.getMethod();
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        // 仅登录/注册不校验 JWT；其余 /api/auth/*（如 me、logout、改密）需带 Bearer
+        if (isPublicAuthEndpoint(uri, method)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -83,6 +88,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private static boolean isPublicAuthEndpoint(String uri, String method) {
+        if (!"POST".equalsIgnoreCase(method)) {
+            return false;
+        }
+        return "/api/auth/login".equals(uri) || "/api/auth/register".equals(uri);
     }
 
     private void sendUnauthorized(HttpServletResponse response, String msg) throws IOException {

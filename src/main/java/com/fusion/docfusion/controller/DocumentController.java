@@ -6,6 +6,7 @@ import com.fusion.docfusion.dto.DocumentSetVO;
 import com.fusion.docfusion.service.DocumentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -27,8 +28,8 @@ public class DocumentController {
      * POST /api/documents/upload
      * Content-Type: multipart/form-data, key 建议用 "files"
      */
-    @PostMapping("/upload")
-    public Result<DocumentSetVO> uploadDocuments(@RequestParam("files") List<MultipartFile> files) {
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<DocumentSetVO> uploadDocuments(@RequestPart("files") List<MultipartFile> files) {
         log.info("上传文档集请求, fileCount={}", files == null ? 0 : files.size());
         return documentService.uploadDocuments(files);
     }
@@ -45,21 +46,21 @@ public class DocumentController {
 
     /**
      * 删除文档集（级联删除其中的文档与相关任务）
-     * DELETE /api/documents/sets/{documentSetId}
+     * DELETE /api/documents/sets/public/{documentSetPublicId}
      */
-    @DeleteMapping("/sets/{documentSetId}")
-    public Result<Boolean> deleteDocumentSet(@PathVariable Long documentSetId) {
-        log.info("删除文档集, documentSetId={}", documentSetId);
-        return documentService.deleteDocumentSet(documentSetId);
+    @DeleteMapping("/sets/public/{documentSetPublicId}")
+    public Result<Boolean> deleteDocumentSetByPublicId(@PathVariable String documentSetPublicId) {
+        log.info("删除文档集(公共ID), documentSetPublicId={}", documentSetPublicId);
+        return documentService.deleteDocumentSetByPublicId(documentSetPublicId);
     }
 
     /**
-     * 查询文档集详情（含文档列表）
-     * GET /api/documents/sets/{documentSetId}
+     * 按 publicId 查询文档集详情（用于防枚举/匿名场景）。
+     * GET /api/documents/sets/public/{documentSetPublicId}
      */
-    @GetMapping("/sets/{documentSetId}")
-    public Result<DocumentSetVO> getDocumentSet(@PathVariable Long documentSetId) {
-        log.info("查询文档集, documentSetId={}", documentSetId);
-        return documentService.getDocumentSet(documentSetId);
+    @GetMapping("/sets/public/{documentSetPublicId}")
+    public Result<DocumentSetVO> getDocumentSetByPublicId(@PathVariable String documentSetPublicId) {
+        log.info("查询文档集(公共ID), documentSetPublicId={}", documentSetPublicId);
+        return documentService.getDocumentSetByPublicId(documentSetPublicId);
     }
 }

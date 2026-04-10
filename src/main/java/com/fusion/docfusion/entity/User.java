@@ -9,6 +9,7 @@ public class User {
     private Long id;
     private String username;
     private String password;
+    private String avatarUrl;
     private String role;
     private LocalDateTime createdAt;
 }

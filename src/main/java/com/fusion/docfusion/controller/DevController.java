@@ -1,8 +1,14 @@
 package com.fusion.docfusion.controller;
 
 import com.fusion.docfusion.common.Result;
+import com.fusion.docfusion.entity.Document;
 import com.fusion.docfusion.entity.FieldSchema;
 import com.fusion.docfusion.entity.TemplateField;
+import com.fusion.docfusion.entity.Template;
+import com.fusion.docfusion.exception.BusinessException;
+import com.fusion.docfusion.exception.ErrorCode;
+import com.fusion.docfusion.mapper.DocumentMapper;
+import com.fusion.docfusion.mapper.TemplateMapper;
 import com.fusion.docfusion.service.ExtractionService;
 import com.fusion.docfusion.service.FieldSchemaService;
 import com.fusion.docfusion.service.TemplateFieldService;
@@ -24,16 +30,19 @@ public class DevController {
     private final ExtractionService extractionService;
     private final FieldSchemaService fieldSchemaService;
     private final TemplateFieldService templateFieldService;
+    private final DocumentMapper documentMapper;
+    private final TemplateMapper templateMapper;
 
     /**
      * 对单个文档执行抽取并写入 extracted_value。
-     * POST /api/dev/extract/{documentId}?instruction=xxx
+     * POST /api/dev/extract/public/{documentPublicId}?instruction=xxx
      */
-    @PostMapping("/extract/{documentId}")
-    public Result<String> extractForDocument(@PathVariable Long documentId,
-                                             @RequestParam(value = "instruction", required = false) String instruction) {
-        log.info("Dev: 抽取文档, documentId={}, instructionLen={}",
-                documentId, instruction == null ? 0 : instruction.length());
+    @PostMapping("/extract/public/{documentPublicId}")
+    public Result<String> extractForDocumentByPublicId(@PathVariable String documentPublicId,
+                                                       @RequestParam(value = "instruction", required = false) String instruction) {
+        Long documentId = resolveDocumentId(documentPublicId);
+        log.info("Dev: 抽取文档(公共ID), documentPublicId={}, resolvedDocumentId={}, instructionLen={}",
+                documentPublicId, documentId, instruction == null ? 0 : instruction.length());
         extractionService.extractForDocument(documentId, instruction);
         return Result.success("提取任务已完成（如 AI 服务可用则结果已写入数据库）");
     }
@@ -61,24 +70,48 @@ public class DevController {
 
     /**
      * 为某个模板配置字段映射（覆盖式）。
-     * POST /api/dev/templates/{templateId}/fields
+     * POST /api/dev/templates/public/{templatePublicId}/fields
      */
-    @PostMapping("/templates/{templateId}/fields")
-    public Result<String> saveTemplateFields(@PathVariable Long templateId,
-                                             @RequestBody List<TemplateField> fields) {
-        log.info("Dev: 保存模板字段映射, templateId={}, count={}",
-                templateId, fields == null ? 0 : fields.size());
+    @PostMapping("/templates/public/{templatePublicId}/fields")
+    public Result<String> saveTemplateFieldsByPublicId(@PathVariable String templatePublicId,
+                                                       @RequestBody List<TemplateField> fields) {
+        Long templateId = resolveTemplateId(templatePublicId);
+        log.info("Dev: 保存模板字段映射(公共ID), templatePublicId={}, resolvedTemplateId={}, count={}",
+                templatePublicId, templateId, fields == null ? 0 : fields.size());
         templateFieldService.saveForTemplate(templateId, fields);
         return Result.success("模板字段配置已保存");
     }
 
     /**
      * 查看某个模板的字段映射。
-     * GET /api/dev/templates/{templateId}/fields
+     * GET /api/dev/templates/public/{templatePublicId}/fields
      */
-    @GetMapping("/templates/{templateId}/fields")
-    public Result<List<TemplateField>> listTemplateFields(@PathVariable Long templateId) {
-        log.info("Dev: 查询模板字段映射, templateId={}", templateId);
+    @GetMapping("/templates/public/{templatePublicId}/fields")
+    public Result<List<TemplateField>> listTemplateFieldsByPublicId(@PathVariable String templatePublicId) {
+        Long templateId = resolveTemplateId(templatePublicId);
+        log.info("Dev: 查询模板字段映射(公共ID), templatePublicId={}, resolvedTemplateId={}", templatePublicId, templateId);
         return Result.success(templateFieldService.listByTemplateId(templateId));
+    }
+
+    private Long resolveDocumentId(String documentPublicId) {
+        if (documentPublicId == null || documentPublicId.isBlank()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "documentPublicId 不能为空");
+        }
+        Document d = documentMapper.selectByPublicId(documentPublicId);
+        if (d == null) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        return d.getId();
+    }
+
+    private Long resolveTemplateId(String templatePublicId) {
+        if (templatePublicId == null || templatePublicId.isBlank()) {
+            throw new BusinessException(ErrorCode.TEMPLATE_PUBLIC_ID_INVALID);
+        }
+        Template t = templateMapper.selectByPublicId(templatePublicId);
+        if (t == null) {
+            throw new BusinessException(ErrorCode.TEMPLATE_NOT_FOUND);
+        }
+        return t.getId();
     }
 }

@@ -40,9 +40,6 @@ public class TemplateServiceImpl implements TemplateService {
     @Override
     public Result<TemplateVO> uploadTemplate(MultipartFile file) {
         Long currentUserId = SecurityUtils.currentUserId();
-        if (currentUserId == null) {
-            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录再上传模板");
-        }
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ErrorCode.TEMPLATE_UPLOAD_EMPTY);
         }
@@ -81,7 +78,9 @@ public class TemplateServiceImpl implements TemplateService {
         }
         String fileType = ext.equals("doc") || ext.equals("docx") ? "word" : "excel";
         Template t = new Template();
+        // 允许匿名上传：ownerId 可为空；登录后写入 ownerId 便于“历史记录/隔离”
         t.setOwnerId(currentUserId);
+        t.setPublicId(generatePublicId());
         t.setReportTypeId(null);
         t.setFileName(safeFilename);
         t.setFileType(fileType);
@@ -116,17 +115,20 @@ public class TemplateServiceImpl implements TemplateService {
     }
 
     @Override
-    public Result<TemplateVO> getById(Long templateId) {
-        Template t = templateMapper.selectById(templateId);
+    public Result<TemplateVO> getByPublicId(String templatePublicId) {
+        if (templatePublicId == null || templatePublicId.isBlank()) {
+            throw new BusinessException(ErrorCode.TEMPLATE_PUBLIC_ID_INVALID);
+        }
+        Template t = templateMapper.selectByPublicId(templatePublicId);
         if (t == null) {
             throw new BusinessException(ErrorCode.TEMPLATE_NOT_FOUND);
         }
+        // 匿名上传的模板 ownerId 为空：允许通过 publicId 访问；有 ownerId 的仍按权限校验
         Long currentUserId = SecurityUtils.currentUserId();
-        if (currentUserId == null || (t.getOwnerId() != null && !currentUserId.equals(t.getOwnerId()))) {
+        if (t.getOwnerId() != null && (currentUserId == null || !currentUserId.equals(t.getOwnerId()))) {
             throw new BusinessException(ErrorCode.TEMPLATE_FORBIDDEN_VIEW);
         }
-        TemplateVO vo = toVO(t);
-        return Result.success(vo);
+        return Result.success(toVO(t));
     }
 
     @Override
@@ -167,6 +169,7 @@ public class TemplateServiceImpl implements TemplateService {
     private TemplateVO toVO(Template t) {
         TemplateVO vo = new TemplateVO();
         vo.setId(t.getId());
+        vo.setPublicId(t.getPublicId());
         vo.setReportTypeId(t.getReportTypeId());
         vo.setFileName(t.getFileName());
         vo.setFileType(t.getFileType());
@@ -192,6 +195,10 @@ public class TemplateServiceImpl implements TemplateService {
         name = name.replace("..", "");
         name = name.replace('\r', '_').replace('\n', '_');
         return name.trim();
+    }
+
+    private static String generatePublicId() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 
 }

@@ -6,6 +6,7 @@
 
     <resultMap id="TemplateProfileResultMap" type="com.fusion.docfusion.entity.TemplateProfile">
         <id property="id" column="id"/>
+        <result property="publicId" column="public_id"/>
         <result property="templateId" column="template_id"/>
         <result property="content" column="content"/>
         <result property="createdAt" column="created_at"/>
@@ -14,8 +15,8 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.TemplateProfile"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO template_profile (template_id, content, created_at, updated_at)
-        VALUES (#{templateId}, #{content}, #{createdAt}, #{updatedAt})
+        INSERT INTO template_profile (public_id, template_id, content, created_at, updated_at)
+        VALUES (#{publicId}, #{templateId}, #{content}, #{createdAt}, #{updatedAt})
     </insert>
 
     <update id="update" parameterType="com.fusion.docfusion.entity.TemplateProfile">

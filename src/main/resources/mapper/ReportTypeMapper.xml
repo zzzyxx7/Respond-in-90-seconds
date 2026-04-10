@@ -6,6 +6,7 @@
 
     <resultMap id="ReportTypeResultMap" type="com.fusion.docfusion.entity.ReportType">
         <id property="id" column="id"/>
+        <result property="publicId" column="public_id"/>
         <result property="name" column="name"/>
         <result property="description" column="description"/>
         <result property="createdAt" column="created_at"/>
@@ -13,8 +14,8 @@
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.ReportType"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO report_type (name, description, created_at)
-        VALUES (#{name}, #{description}, #{createdAt})
+        INSERT INTO report_type (public_id, name, description, created_at)
+        VALUES (#{publicId}, #{name}, #{description}, #{createdAt})
     </insert>
 
     <update id="update" parameterType="com.fusion.docfusion.entity.ReportType">
@@ -34,6 +35,12 @@
         SELECT *
         FROM report_type
         WHERE id = #{id}
+    </select>
+
+    <select id="selectByPublicId" resultMap="ReportTypeResultMap">
+        SELECT *
+        FROM report_type
+        WHERE public_id = #{publicId}
     </select>
 
     <select id="selectAll" resultMap="ReportTypeResultMap">

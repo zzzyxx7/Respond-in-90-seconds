@@ -41,33 +41,41 @@ public class ReportTypeController {
     }
 
     /**
-     * 获取单个报表类型
-     * GET /api/report-types/{id}
+     * 按 publicId 获取报表类型（用于防枚举）。
+     * GET /api/report-types/public/{publicId}
      */
-    @GetMapping("/{id}")
-    public Result<ReportTypeVO> getById(@PathVariable Long id) {
-        log.info("查询报表类型详情, id={}", id);
-        return reportTypeService.getById(id);
+    @GetMapping("/public/{publicId}")
+    public Result<ReportTypeVO> getByPublicId(@PathVariable String publicId) {
+        log.info("查询报表类型详情(公共ID), publicId={}", publicId);
+        return reportTypeService.getByPublicId(publicId);
     }
 
     /**
-     * 更新报表类型
-     * PUT /api/report-types/{id}
+     * 管理员：按 publicId 更新报表类型
+     * PUT /api/report-types/admin/public/{publicId}
      */
-    @PutMapping("/{id}")
-    public Result<ReportTypeVO> update(@PathVariable Long id, @RequestBody ReportTypeVO vo) {
-        log.info("更新报表类型, id={}", id);
-        return reportTypeService.update(id, vo);
+    @PutMapping("/admin/public/{publicId}")
+    public Result<ReportTypeVO> updateByPublicId(@PathVariable String publicId, @RequestBody ReportTypeVO vo) {
+        log.info("更新报表类型(公共ID), publicId={}", publicId);
+        ReportTypeVO existing = reportTypeService.getByPublicId(publicId).getData();
+        if (existing == null || existing.getId() == null) {
+            return reportTypeService.getByPublicId(publicId);
+        }
+        return reportTypeService.update(existing.getId(), vo);
     }
 
     /**
-     * 删除报表类型
-     * DELETE /api/report-types/{id}
+     * 管理员：按 publicId 删除报表类型
+     * DELETE /api/report-types/admin/public/{publicId}
      */
-    @DeleteMapping("/{id}")
-    public Result<Boolean> delete(@PathVariable Long id) {
-        log.info("删除报表类型, id={}", id);
-        return reportTypeService.delete(id);
+    @DeleteMapping("/admin/public/{publicId}")
+    public Result<Boolean> deleteByPublicId(@PathVariable String publicId) {
+        log.info("删除报表类型(公共ID), publicId={}", publicId);
+        ReportTypeVO existing = reportTypeService.getByPublicId(publicId).getData();
+        if (existing == null || existing.getId() == null) {
+            return Result.success(false);
+        }
+        return reportTypeService.delete(existing.getId());
     }
 }
 
