@@ -4,8 +4,11 @@ import com.fusion.docfusion.common.Result;
 import com.fusion.docfusion.config.UploadProperties;
 import com.fusion.docfusion.dto.FillRequest;
 import com.fusion.docfusion.dto.FillTaskListPageVO;
+import com.fusion.docfusion.dto.FillTaskTokenStatsVO;
 import com.fusion.docfusion.dto.FillTaskVO;
 import com.fusion.docfusion.dto.FreeFillRequest;
+import com.fusion.docfusion.dto.HistorySyncRequest;
+import com.fusion.docfusion.dto.HistorySyncResultVO;
 import com.fusion.docfusion.entity.DocumentSet;
 import com.fusion.docfusion.entity.Template;
 import com.fusion.docfusion.enums.TaskStatus;
@@ -135,6 +138,28 @@ public class FillController {
                                                 @RequestParam(value = "size", required = false) Integer size) {
         log.info("查询填表任务列表, mode={}, status={}, page={}, size={}", mode, status, page, size);
         return fillService.listTasks(mode, status, page, size);
+    }
+
+    /**
+     * 查询当前用户 token/成本汇总（用于成本审计）。
+     * GET /api/fill/tasks/token-stats?mode=TEMPLATE&status=SUCCESS
+     */
+    @GetMapping("/tasks/token-stats")
+    public Result<FillTaskTokenStatsVO> getTokenStats(@RequestParam(value = "mode", required = false) String mode,
+                                                      @RequestParam(value = "status", required = false) String status) {
+        log.info("查询 token 成本汇总, mode={}, status={}", mode, status);
+        return fillService.getTokenStats(mode, status);
+    }
+
+    /**
+     * 登录后批量同步“匿名历史任务”到当前账号。
+     * POST /api/fill/tasks/sync
+     */
+    @PostMapping("/tasks/sync")
+    public Result<HistorySyncResultVO> syncTaskHistory(@RequestBody(required = false) HistorySyncRequest request) {
+        int count = request == null || request.getPublicIds() == null ? 0 : request.getPublicIds().size();
+        log.info("同步任务历史, count={}", count);
+        return fillService.syncTaskHistory(request);
     }
 
     /**

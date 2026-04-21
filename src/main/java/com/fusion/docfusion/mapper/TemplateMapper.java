@@ -11,6 +11,8 @@ public interface TemplateMapper {
     int insert(Template entity);
     Template selectById(@Param("id") Long id);
     Template selectByPublicId(@Param("publicId") String publicId);
+    List<Template> selectByPublicIds(@Param("publicIds") List<String> publicIds);
+    int claimOwnerByPublicId(@Param("publicId") String publicId, @Param("ownerId") Long ownerId);
     List<Template> selectAll();
 
     List<Template> selectAllByOwner(@Param("ownerId") Long ownerId);

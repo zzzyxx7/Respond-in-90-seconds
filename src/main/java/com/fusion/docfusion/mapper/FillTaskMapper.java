@@ -11,8 +11,13 @@ import java.util.List;
 public interface FillTaskMapper {
     int insert(FillTask entity);
     int updateById(FillTask entity);
+    int markRunning(@Param("id") Long id,
+                    @Param("status") String status,
+                    @Param("version") Long version);
     FillTask selectById(@Param("id") Long id);
     FillTask selectByPublicId(@Param("publicId") String publicId);
+    List<FillTask> selectByPublicIds(@Param("publicIds") List<String> publicIds);
+    int claimUserByPublicId(@Param("publicId") String publicId, @Param("userId") Long userId);
 
     List<FillTask> selectByConditions(@Param("userId") Long userId,
                                       @Param("mode") String mode,
@@ -67,4 +72,31 @@ public interface FillTaskMapper {
     int markRunningTimeout(@Param("id") Long id,
                            @Param("timeoutStatus") String timeoutStatus,
                            @Param("message") String message);
+
+    /**
+     * 当前用户任务 token / 成本汇总（可按 mode/status 条件过滤）。
+     */
+    com.fusion.docfusion.dto.FillTaskTokenStatsVO sumTokenStatsByConditions(@Param("userId") Long userId,
+                                                                             @Param("mode") String mode,
+                                                                             @Param("status") String status);
+
+    List<com.fusion.docfusion.dto.FillTaskTokenStatsVO.BreakdownItem> sumTokenStatsByProvider(@Param("userId") Long userId,
+                                                                                               @Param("mode") String mode,
+                                                                                               @Param("status") String status);
+
+    List<com.fusion.docfusion.dto.FillTaskTokenStatsVO.BreakdownItem> sumTokenStatsByMode(@Param("userId") Long userId,
+                                                                                           @Param("mode") String mode,
+                                                                                           @Param("status") String status);
+
+    List<com.fusion.docfusion.dto.FillTaskTokenStatsVO.BreakdownItem> sumTokenStatsByStatus(@Param("userId") Long userId,
+                                                                                             @Param("mode") String mode,
+                                                                                             @Param("status") String status);
+
+    List<com.fusion.docfusion.dto.FillTaskTokenStatsVO.CurrencyBreakdownItem> sumTokenStatsByCurrency(@Param("userId") Long userId,
+                                                                                                       @Param("mode") String mode,
+                                                                                                       @Param("status") String status);
+
+    Long countMissingUsageTasksByConditions(@Param("userId") Long userId,
+                                            @Param("mode") String mode,
+                                            @Param("status") String status);
 }

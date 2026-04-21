@@ -12,5 +12,6 @@ public class TemplateVO {
     private Long reportTypeId;
     private String fileName;
     private String fileType;
+    private Long fileSize;
     private LocalDateTime createdAt;
 }

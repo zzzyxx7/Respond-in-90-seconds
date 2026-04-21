@@ -122,6 +122,16 @@ CREATE TABLE IF NOT EXISTS fill_task (
                                          finished_at DATETIME DEFAULT NULL COMMENT '任务完成时间',
                                          error_message VARCHAR(512) DEFAULT NULL COMMENT '如失败，记录错误信息',
                                          version BIGINT NOT NULL DEFAULT 0 COMMENT '乐观锁版本号，每次更新+1',
+                                         ai_remote_task_id VARCHAR(128) DEFAULT NULL COMMENT '远端 AI 任务ID',
+                                         ai_provider VARCHAR(64) DEFAULT NULL COMMENT 'AI 供应商标识',
+                                         ai_model VARCHAR(128) DEFAULT NULL COMMENT 'AI 模型名',
+                                         input_tokens BIGINT DEFAULT NULL COMMENT '输入 token 数',
+                                         output_tokens BIGINT DEFAULT NULL COMMENT '输出 token 数',
+                                         total_tokens BIGINT DEFAULT NULL COMMENT '总 token 数',
+                                         ai_cost DECIMAL(18,8) DEFAULT NULL COMMENT '本次 AI 成本',
+                                         ai_cost_currency VARCHAR(16) DEFAULT NULL COMMENT '成本币种',
+                                         ai_cost_estimated TINYINT(1) DEFAULT NULL COMMENT '是否后端估算成本',
+                                         ai_usage_raw JSON DEFAULT NULL COMMENT '供应商 usage 原始 JSON',
 
                                          INDEX idx_fill_document_set_id (document_set_id),
                                          INDEX idx_fill_template_id (template_id),
@@ -284,6 +294,22 @@ ALTER TABLE fill_task
 
 ALTER TABLE fill_task
     ADD UNIQUE INDEX IF NOT EXISTS uk_fill_task_public_id (public_id);
+
+/******************************
+ * 12.1 兼容升级（已有库执行）
+ * fill_task 增加 token / 成本审计字段
+ ******************************/
+ALTER TABLE fill_task
+    ADD COLUMN ai_remote_task_id VARCHAR(128) NULL COMMENT '远端 AI 任务ID' AFTER version,
+    ADD COLUMN ai_provider VARCHAR(64) NULL COMMENT 'AI 供应商标识' AFTER ai_remote_task_id,
+    ADD COLUMN ai_model VARCHAR(128) NULL COMMENT 'AI 模型名' AFTER ai_provider,
+    ADD COLUMN input_tokens BIGINT NULL COMMENT '输入 token 数' AFTER ai_model,
+    ADD COLUMN output_tokens BIGINT NULL COMMENT '输出 token 数' AFTER input_tokens,
+    ADD COLUMN total_tokens BIGINT NULL COMMENT '总 token 数' AFTER output_tokens,
+    ADD COLUMN ai_cost DECIMAL(18,8) NULL COMMENT '本次 AI 成本' AFTER total_tokens,
+    ADD COLUMN ai_cost_currency VARCHAR(16) NULL COMMENT '成本币种' AFTER ai_cost,
+    ADD COLUMN ai_cost_estimated TINYINT(1) NULL COMMENT '是否后端估算成本' AFTER ai_cost_currency,
+    ADD COLUMN ai_usage_raw JSON NULL COMMENT '供应商 usage 原始 JSON' AFTER ai_cost_estimated;
 
 /******************************
  * 13. 兼容升级（已有库执行）

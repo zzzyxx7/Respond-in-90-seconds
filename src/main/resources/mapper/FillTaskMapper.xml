@@ -18,14 +18,28 @@
         <result property="finishedAt" column="finished_at"/>
         <result property="errorMessage" column="error_message"/>
         <result property="version" column="version"/>
+        <result property="aiRemoteTaskId" column="ai_remote_task_id"/>
+        <result property="aiProvider" column="ai_provider"/>
+        <result property="aiModel" column="ai_model"/>
+        <result property="inputTokens" column="input_tokens"/>
+        <result property="outputTokens" column="output_tokens"/>
+        <result property="totalTokens" column="total_tokens"/>
+        <result property="aiCost" column="ai_cost"/>
+        <result property="aiCostCurrency" column="ai_cost_currency"/>
+        <result property="aiCostEstimated" column="ai_cost_estimated"/>
+        <result property="aiUsageRaw" column="ai_usage_raw"/>
     </resultMap>
 
     <insert id="insert" parameterType="com.fusion.docfusion.entity.FillTask"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO fill_task (public_id, user_id, document_set_id, template_id, mode, user_requirement, status, result_file_path,
-                               created_at, finished_at, error_message, version)
+                               created_at, finished_at, error_message, version,
+                               ai_remote_task_id, ai_provider, ai_model, input_tokens, output_tokens, total_tokens,
+                               ai_cost, ai_cost_currency, ai_cost_estimated, ai_usage_raw)
         VALUES (#{publicId}, #{userId}, #{documentSetId}, #{templateId}, #{mode}, #{userRequirement}, #{status}, #{resultFilePath},
-                #{createdAt}, #{finishedAt}, #{errorMessage}, 0)
+                #{createdAt}, #{finishedAt}, #{errorMessage}, 0,
+                #{aiRemoteTaskId}, #{aiProvider}, #{aiModel}, #{inputTokens}, #{outputTokens}, #{totalTokens},
+                #{aiCost}, #{aiCostCurrency}, #{aiCostEstimated}, #{aiUsageRaw})
     </insert>
 
     <update id="updateById" parameterType="com.fusion.docfusion.entity.FillTask">
@@ -35,8 +49,31 @@
             <if test="resultFilePath != null">result_file_path = #{resultFilePath},</if>
             <if test="finishedAt != null">finished_at = #{finishedAt},</if>
             <if test="errorMessage != null">error_message = #{errorMessage},</if>
+            <if test="aiRemoteTaskId != null">ai_remote_task_id = #{aiRemoteTaskId},</if>
+            <if test="aiProvider != null">ai_provider = #{aiProvider},</if>
+            <if test="aiModel != null">ai_model = #{aiModel},</if>
+            <if test="inputTokens != null">input_tokens = #{inputTokens},</if>
+            <if test="outputTokens != null">output_tokens = #{outputTokens},</if>
+            <if test="totalTokens != null">total_tokens = #{totalTokens},</if>
+            <if test="aiCost != null">ai_cost = #{aiCost},</if>
+            <if test="aiCostCurrency != null">ai_cost_currency = #{aiCostCurrency},</if>
+            <if test="aiCostEstimated != null">ai_cost_estimated = #{aiCostEstimated},</if>
+            <if test="aiUsageRaw != null">ai_usage_raw = #{aiUsageRaw},</if>
             version = version + 1,
         </set>
+        WHERE id = #{id}
+        <if test="version != null">
+            AND version = #{version}
+        </if>
+    </update>
+
+    <update id="markRunning">
+        UPDATE fill_task
+        SET status = #{status},
+            finished_at = NULL,
+            error_message = NULL,
+            result_file_path = NULL,
+            version = version + 1
         WHERE id = #{id}
         <if test="version != null">
             AND version = #{version}
@@ -54,6 +91,22 @@
         FROM fill_task
         WHERE public_id = #{publicId}
     </select>
+
+    <select id="selectByPublicIds" resultMap="FillTaskResultMap">
+        SELECT *
+        FROM fill_task
+        WHERE public_id IN
+        <foreach collection="publicIds" item="pid" open="(" separator="," close=")">
+            #{pid}
+        </foreach>
+    </select>
+
+    <update id="claimUserByPublicId">
+        UPDATE fill_task
+        SET user_id = #{userId}
+        WHERE public_id = #{publicId}
+          AND user_id IS NULL
+    </update>
 
     <select id="selectByConditions" resultMap="FillTaskResultMap">
         SELECT *
@@ -122,6 +175,16 @@
             finished_at = NULL,
             result_file_path = NULL,
             error_message = #{message},
+            ai_remote_task_id = NULL,
+            ai_provider = NULL,
+            ai_model = NULL,
+            input_tokens = NULL,
+            output_tokens = NULL,
+            total_tokens = NULL,
+            ai_cost = NULL,
+            ai_cost_currency = NULL,
+            ai_cost_estimated = NULL,
+            ai_usage_raw = NULL,
             version = version + 1
         WHERE id = #{id}
           AND status IN (#{fromStatus1}, #{fromStatus2})
@@ -157,4 +220,137 @@
         WHERE id = #{id}
           AND status = 'RUNNING'
     </update>
+
+    <select id="sumTokenStatsByConditions" resultType="com.fusion.docfusion.dto.FillTaskTokenStatsVO">
+        SELECT COUNT(*)                                                AS task_count,
+               COALESCE(SUM(input_tokens), 0)                         AS total_input_tokens,
+               COALESCE(SUM(output_tokens), 0)                        AS total_output_tokens,
+               COALESCE(SUM(total_tokens), 0)                         AS total_tokens,
+               COALESCE(SUM(ai_cost), 0)                              AS total_cost
+        FROM fill_task
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="mode != null and mode != ''">
+                AND mode = #{mode}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+    </select>
+
+    <select id="sumTokenStatsByProvider" resultType="com.fusion.docfusion.dto.FillTaskTokenStatsVO$BreakdownItem">
+        SELECT COALESCE(NULLIF(ai_provider, ''), 'unknown')           AS `key`,
+               COUNT(*)                                               AS task_count,
+               COALESCE(SUM(input_tokens), 0)                         AS input_tokens,
+               COALESCE(SUM(output_tokens), 0)                        AS output_tokens,
+               COALESCE(SUM(total_tokens), 0)                         AS total_tokens,
+               COALESCE(SUM(ai_cost), 0)                              AS total_cost,
+               COALESCE(MAX(NULLIF(ai_cost_currency, '')), 'USD')     AS total_cost_currency
+        FROM fill_task
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="mode != null and mode != ''">
+                AND mode = #{mode}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+        GROUP BY COALESCE(NULLIF(ai_provider, ''), 'unknown')
+        ORDER BY total_tokens DESC, task_count DESC
+    </select>
+
+    <select id="sumTokenStatsByMode" resultType="com.fusion.docfusion.dto.FillTaskTokenStatsVO$BreakdownItem">
+        SELECT COALESCE(NULLIF(mode, ''), 'unknown')                  AS `key`,
+               COUNT(*)                                               AS task_count,
+               COALESCE(SUM(input_tokens), 0)                         AS input_tokens,
+               COALESCE(SUM(output_tokens), 0)                        AS output_tokens,
+               COALESCE(SUM(total_tokens), 0)                         AS total_tokens,
+               COALESCE(SUM(ai_cost), 0)                              AS total_cost,
+               COALESCE(MAX(NULLIF(ai_cost_currency, '')), 'USD')     AS total_cost_currency
+        FROM fill_task
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="mode != null and mode != ''">
+                AND mode = #{mode}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+        GROUP BY COALESCE(NULLIF(mode, ''), 'unknown')
+        ORDER BY total_tokens DESC, task_count DESC
+    </select>
+
+    <select id="sumTokenStatsByStatus" resultType="com.fusion.docfusion.dto.FillTaskTokenStatsVO$BreakdownItem">
+        SELECT COALESCE(NULLIF(status, ''), 'unknown')                AS `key`,
+               COUNT(*)                                               AS task_count,
+               COALESCE(SUM(input_tokens), 0)                         AS input_tokens,
+               COALESCE(SUM(output_tokens), 0)                        AS output_tokens,
+               COALESCE(SUM(total_tokens), 0)                         AS total_tokens,
+               COALESCE(SUM(ai_cost), 0)                              AS total_cost,
+               COALESCE(MAX(NULLIF(ai_cost_currency, '')), 'USD')     AS total_cost_currency
+        FROM fill_task
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="mode != null and mode != ''">
+                AND mode = #{mode}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+        GROUP BY COALESCE(NULLIF(status, ''), 'unknown')
+        ORDER BY total_tokens DESC, task_count DESC
+    </select>
+
+    <select id="sumTokenStatsByCurrency" resultType="com.fusion.docfusion.dto.FillTaskTokenStatsVO$CurrencyBreakdownItem">
+        SELECT COALESCE(NULLIF(ai_cost_currency, ''), 'USD')          AS currency,
+               COUNT(*)                                               AS task_count,
+               COALESCE(SUM(ai_cost), 0)                              AS total_cost
+        FROM fill_task
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="mode != null and mode != ''">
+                AND mode = #{mode}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+        GROUP BY COALESCE(NULLIF(ai_cost_currency, ''), 'USD')
+        ORDER BY total_cost DESC, task_count DESC
+    </select>
+
+    <select id="countMissingUsageTasksByConditions" resultType="long">
+        SELECT COUNT(*)
+        FROM fill_task
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="mode != null and mode != ''">
+                AND mode = #{mode}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            AND (
+                (input_tokens IS NULL OR input_tokens = 0)
+                AND (output_tokens IS NULL OR output_tokens = 0)
+                AND (total_tokens IS NULL OR total_tokens = 0)
+            )
+        </where>
+    </select>
 </mapper>

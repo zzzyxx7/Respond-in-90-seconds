@@ -5,7 +5,9 @@ import java.time.LocalDateTime;
 public record FillTaskStatusEvent(
         String status,
         String errorMessage,
-        LocalDateTime finishedAt
+        LocalDateTime finishedAt,
+        String resultFilePath,
+        String resultFileType,
+        Long totalDurationMs
 ) {
 }
-

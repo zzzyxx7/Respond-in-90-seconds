@@ -34,7 +34,7 @@ public class FillTaskRecoveryJob {
     private boolean startupRunEnabled;
     @Value("${fill.task.recovery.batch-size:200}")
     private int batchSize;
-    @Value("${fill.task.running-timeout-minutes:10}")
+    @Value("${fill.task.running-timeout-minutes:20}")
     private int runningTimeoutMinutes;
 
     @EventListener(ApplicationReadyEvent.class)

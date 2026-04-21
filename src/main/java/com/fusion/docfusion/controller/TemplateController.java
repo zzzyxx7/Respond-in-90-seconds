@@ -1,6 +1,8 @@
 package com.fusion.docfusion.controller;
 
 import com.fusion.docfusion.common.Result;
+import com.fusion.docfusion.dto.HistorySyncRequest;
+import com.fusion.docfusion.dto.HistorySyncResultVO;
 import com.fusion.docfusion.dto.TemplateProfileVO;
 import com.fusion.docfusion.dto.TemplateVO;
 import com.fusion.docfusion.service.TemplateService;
@@ -11,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 
 /**
@@ -29,6 +32,17 @@ public class TemplateController {
     public Result<TemplateVO> uploadTemplate(@RequestPart("file") MultipartFile file) {
         log.info("上传模板请求, filename={}, size={}", file == null ? null : file.getOriginalFilename(), file == null ? null : file.getSize());
         return templateService.uploadTemplate(file);
+    }
+
+    /**
+     * 登录后批量同步“匿名历史模板”到当前账号。
+     * POST /api/templates/sync
+     */
+    @PostMapping("/sync")
+    public Result<HistorySyncResultVO> syncTemplateHistory(@RequestBody(required = false) HistorySyncRequest request) {
+        int count = request == null || request.getPublicIds() == null ? 0 : request.getPublicIds().size();
+        log.info("同步模板历史, count={}", count);
+        return templateService.syncTemplateHistory(request);
     }
 
     @GetMapping("/list")
@@ -55,6 +69,16 @@ public class TemplateController {
     public Result<TemplateVO> getByPublicId(@PathVariable String templatePublicId) {
         log.info("查询模板详情(公共ID), templatePublicId={}", templatePublicId);
         return templateService.getByPublicId(templatePublicId);
+    }
+
+    /**
+     * 下载模板原始文件（用于前端预览等；权限与详情接口一致）。
+     * GET /api/templates/download/public/{templatePublicId}
+     */
+    @GetMapping("/download/public/{templatePublicId}")
+    public void downloadTemplateByPublicId(@PathVariable String templatePublicId, HttpServletResponse response) {
+        log.info("下载模板文件(公共ID), templatePublicId={}", templatePublicId);
+        templateService.writeTemplateFileByPublicId(templatePublicId, response);
     }
 
     /**

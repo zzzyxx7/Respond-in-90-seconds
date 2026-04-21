@@ -29,6 +29,22 @@
         SELECT * FROM template WHERE public_id = #{publicId}
     </select>
 
+    <select id="selectByPublicIds" resultMap="TemplateResultMap">
+        SELECT *
+        FROM template
+        WHERE public_id IN
+        <foreach collection="publicIds" item="pid" open="(" separator="," close=")">
+            #{pid}
+        </foreach>
+    </select>
+
+    <update id="claimOwnerByPublicId">
+        UPDATE template
+        SET owner_id = #{ownerId}
+        WHERE public_id = #{publicId}
+          AND owner_id IS NULL
+    </update>
+
     <select id="selectAll" resultMap="TemplateResultMap">
         SELECT * FROM template ORDER BY created_at DESC
     </select>

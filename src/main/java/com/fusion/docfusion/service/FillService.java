@@ -3,8 +3,11 @@ package com.fusion.docfusion.service;
 import com.fusion.docfusion.common.Result;
 import com.fusion.docfusion.dto.FillRequest;
 import com.fusion.docfusion.dto.FillTaskListPageVO;
+import com.fusion.docfusion.dto.FillTaskTokenStatsVO;
 import com.fusion.docfusion.dto.FillTaskVO;
 import com.fusion.docfusion.dto.FreeFillRequest;
+import com.fusion.docfusion.dto.HistorySyncRequest;
+import com.fusion.docfusion.dto.HistorySyncResultVO;
 
 /**
  * 填表任务：根据文档集 + 模板，触发一次自动填表，返回任务 ID；支持异步查询结果与下载
@@ -41,4 +44,14 @@ public interface FillService {
      * 查询任务列表（分页，含 total / hasMore）
      */
     Result<FillTaskListPageVO> listTasks(String mode, String status, Integer page, Integer size);
+
+    /**
+     * 查询当前登录用户的 token / 成本汇总。
+     */
+    Result<FillTaskTokenStatsVO> getTokenStats(String mode, String status);
+
+    /**
+     * 登录后将匿名历史任务（本地保存的 publicId）批量同步到当前账号。
+     */
+    Result<HistorySyncResultVO> syncTaskHistory(HistorySyncRequest request);
 }

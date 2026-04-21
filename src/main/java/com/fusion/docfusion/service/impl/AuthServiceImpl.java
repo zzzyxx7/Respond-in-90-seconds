@@ -65,6 +65,7 @@ public class AuthServiceImpl implements AuthService {
         resp.setToken(token);
         resp.setUserId(user.getId());
         resp.setUsername(user.getUsername());
+        resp.setAvatarUrl(user.getAvatarUrl());
         resp.setRole(user.getRole());
         return Result.success(resp);
     }
@@ -103,6 +104,7 @@ public class AuthServiceImpl implements AuthService {
         resp.setToken(token);
         resp.setUserId(u.getId());
         resp.setUsername(u.getUsername());
+        resp.setAvatarUrl(u.getAvatarUrl());
         resp.setRole(u.getRole());
         return Result.success(resp);
     }
@@ -270,4 +272,3 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 }
-

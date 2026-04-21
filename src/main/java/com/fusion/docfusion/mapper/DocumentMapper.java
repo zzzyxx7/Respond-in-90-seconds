@@ -12,4 +12,5 @@ public interface DocumentMapper {
     List<Document> selectByDocumentSetId(@Param("documentSetId") Long documentSetId);
     Document selectById(@Param("id") Long id);
     Document selectByPublicId(@Param("publicId") String publicId);
+    int deleteById(@Param("id") Long id);
 }

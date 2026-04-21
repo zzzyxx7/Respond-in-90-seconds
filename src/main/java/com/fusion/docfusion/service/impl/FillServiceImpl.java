@@ -4,9 +4,12 @@ import com.fusion.docfusion.common.Result;
 import com.fusion.docfusion.config.RabbitConfig;
 import com.fusion.docfusion.dto.FillRequest;
 import com.fusion.docfusion.dto.FillTaskListPageVO;
+import com.fusion.docfusion.dto.FillTaskTokenStatsVO;
 import com.fusion.docfusion.dto.FillTaskVO;
 import com.fusion.docfusion.dto.FillTaskStepVO;
 import com.fusion.docfusion.dto.FreeFillRequest;
+import com.fusion.docfusion.dto.HistorySyncRequest;
+import com.fusion.docfusion.dto.HistorySyncResultVO;
 import com.fusion.docfusion.entity.FillTaskStep;
 import com.fusion.docfusion.entity.Document;
 import com.fusion.docfusion.entity.DocumentSet;
@@ -36,8 +39,12 @@ import com.fusion.docfusion.sse.FillTaskStatusEvent;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 填表任务：创建任务后执行填表逻辑。
@@ -232,6 +239,93 @@ public class FillServiceImpl implements FillService {
         return Result.success(pageVO);
     }
 
+    @Override
+    public Result<FillTaskTokenStatsVO> getTokenStats(String mode, String status) {
+        Long currentUserId = SecurityUtils.currentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录查看 token 成本统计");
+        }
+        FillTaskTokenStatsVO stats = fillTaskMapper.sumTokenStatsByConditions(currentUserId, mode, status);
+        if (stats == null) {
+            stats = new FillTaskTokenStatsVO();
+            stats.setTaskCount(0L);
+            stats.setTotalInputTokens(0L);
+            stats.setTotalOutputTokens(0L);
+            stats.setTotalTokens(0L);
+            stats.setTotalCost(java.math.BigDecimal.ZERO);
+        }
+        stats.setTotalCostCurrency("USD");
+        Long missingUsageTaskCount = fillTaskMapper.countMissingUsageTasksByConditions(currentUserId, mode, status);
+        stats.setMissingUsageTaskCount(missingUsageTaskCount == null ? 0L : missingUsageTaskCount);
+        stats.setProviderBreakdowns(fillTaskMapper.sumTokenStatsByProvider(currentUserId, mode, status));
+        stats.setModeBreakdowns(fillTaskMapper.sumTokenStatsByMode(currentUserId, mode, status));
+        stats.setStatusBreakdowns(fillTaskMapper.sumTokenStatsByStatus(currentUserId, mode, status));
+        stats.setCurrencyBreakdowns(fillTaskMapper.sumTokenStatsByCurrency(currentUserId, mode, status));
+        return Result.success(stats);
+    }
+
+    @Override
+    public Result<HistorySyncResultVO> syncTaskHistory(HistorySyncRequest request) {
+        Long currentUserId = SecurityUtils.currentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录后再同步任务历史");
+        }
+        List<String> ids = normalizePublicIds(request);
+        HistorySyncResultVO result = new HistorySyncResultVO();
+        result.setTotal(ids.size());
+        if (ids.isEmpty()) {
+            result.setClaimed(0);
+            result.setAlreadyOwned(0);
+            result.setNotFound(0);
+            result.setForbidden(0);
+            return Result.success(result);
+        }
+
+        Map<String, FillTask> existing = fillTaskMapper.selectByPublicIds(ids).stream()
+                .collect(Collectors.toMap(FillTask::getPublicId, Function.identity(), (a, b) -> a));
+        for (String publicId : ids) {
+            FillTask task = existing.get(publicId);
+            if (task == null) {
+                result.getNotFoundIds().add(publicId);
+                continue;
+            }
+            if (task.getUserId() == null) {
+                int updated = fillTaskMapper.claimUserByPublicId(publicId, currentUserId);
+                if (updated > 0) {
+                    result.getClaimedIds().add(publicId);
+                } else {
+                    FillTask latest = fillTaskMapper.selectByPublicId(publicId);
+                    if (latest != null && currentUserId.equals(latest.getUserId())) {
+                        result.getAlreadyOwnedIds().add(publicId);
+                    } else {
+                        result.getForbiddenIds().add(publicId);
+                    }
+                }
+                continue;
+            }
+            if (currentUserId.equals(task.getUserId())) {
+                result.getAlreadyOwnedIds().add(publicId);
+            } else {
+                result.getForbiddenIds().add(publicId);
+            }
+        }
+        result.setClaimed(result.getClaimedIds().size());
+        result.setAlreadyOwned(result.getAlreadyOwnedIds().size());
+        result.setNotFound(result.getNotFoundIds().size());
+        result.setForbidden(result.getForbiddenIds().size());
+        return Result.success(result);
+    }
+
+    private static List<String> normalizePublicIds(HistorySyncRequest request) {
+        if (request == null || request.getPublicIds() == null || request.getPublicIds().isEmpty()) {
+            return List.of();
+        }
+        return new ArrayList<>(request.getPublicIds().stream()
+                .filter(v -> v != null && !v.isBlank())
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new)));
+    }
+
     private FillTaskVO toVO(FillTask task, boolean includeSteps) {
         FillTaskVO vo = new FillTaskVO();
         vo.setId(task.getId());
@@ -243,9 +337,19 @@ public class FillServiceImpl implements FillService {
         vo.setUserRequirement(task.getUserRequirement());
         vo.setStatus(task.getStatus());
         vo.setResultFilePath(task.getResultFilePath());
+        vo.setResultFileType(detectResultFileType(task.getResultFilePath()));
         vo.setCreatedAt(task.getCreatedAt());
         vo.setFinishedAt(task.getFinishedAt());
         vo.setErrorMessage(task.getErrorMessage());
+        vo.setAiRemoteTaskId(task.getAiRemoteTaskId());
+        vo.setAiProvider(task.getAiProvider());
+        vo.setAiModel(task.getAiModel());
+        vo.setInputTokens(task.getInputTokens());
+        vo.setOutputTokens(task.getOutputTokens());
+        vo.setTotalTokens(task.getTotalTokens());
+        vo.setAiCost(task.getAiCost());
+        vo.setAiCostCurrency(task.getAiCostCurrency());
+        vo.setAiCostEstimated(task.getAiCostEstimated());
 
         vo.setTotalDurationMs(calcTotalDurationMs(task.getCreatedAt(), task.getFinishedAt()));
         List<FillTaskStep> steps = null;
@@ -375,6 +479,23 @@ public class FillServiceImpl implements FillService {
         return Duration.between(startedAt, end).toMillis();
     }
 
+    private static String detectResultFileType(String resultFilePath) {
+        if (resultFilePath == null || resultFilePath.isBlank()) {
+            return null;
+        }
+        String lower = resultFilePath.toLowerCase();
+        if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+            return "excel";
+        }
+        if (lower.endsWith(".docx") || lower.endsWith(".doc")) {
+            return "docx";
+        }
+        if (lower.endsWith(".json")) {
+            return "json";
+        }
+        return "unknown";
+    }
+
     private static String generatePublicId() {
         return UUID.randomUUID().toString().replace("-", "");
     }
@@ -401,7 +522,10 @@ public class FillServiceImpl implements FillService {
         sseBroker.publish(task.getPublicId(), "TASK_STATUS", new FillTaskStatusEvent(
                 TaskStatus.CANCELLED.name(),
                 task.getErrorMessage(),
-                task.getFinishedAt()
+                task.getFinishedAt(),
+                task.getResultFilePath(),
+                detectResultFileType(task.getResultFilePath()),
+                calcTotalDurationMs(task.getCreatedAt(), task.getFinishedAt())
         ));
     }
 

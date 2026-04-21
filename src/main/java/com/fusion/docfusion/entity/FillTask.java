@@ -2,6 +2,7 @@ package com.fusion.docfusion.entity;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -39,4 +40,25 @@ public class FillTask {
      * 乐观锁版本号（每次更新 +1）。
      */
     private Long version;
+
+    /** AI 任务ID（远端），用于审计与排查 */
+    private String aiRemoteTaskId;
+    /** AI 供应商标识（如 openai / qwen / deepseek） */
+    private String aiProvider;
+    /** 实际调用模型名（如 gpt-4.1-mini） */
+    private String aiModel;
+    /** 输入 token 数 */
+    private Long inputTokens;
+    /** 输出 token 数 */
+    private Long outputTokens;
+    /** 总 token 数 */
+    private Long totalTokens;
+    /** 本次调用成本（按 aiCostCurrency） */
+    private BigDecimal aiCost;
+    /** 成本币种（默认 USD） */
+    private String aiCostCurrency;
+    /** true 表示由后端按单价估算；false 表示供应商原始返回 */
+    private Boolean aiCostEstimated;
+    /** 供应商返回的 usage 原始 JSON（便于审计） */
+    private String aiUsageRaw;
 }

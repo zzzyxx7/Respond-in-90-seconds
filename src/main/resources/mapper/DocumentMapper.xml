@@ -32,4 +32,8 @@
     <select id="selectByPublicId" resultMap="DocumentResultMap">
         SELECT * FROM document WHERE public_id = #{publicId}
     </select>
+
+    <delete id="deleteById">
+        DELETE FROM document WHERE id = #{id}
+    </delete>
 </mapper>

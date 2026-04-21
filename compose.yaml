@@ -17,8 +17,8 @@ services:
   rabbitmq:
     image: 'rabbitmq:3-management'
     environment:
-      - 'RABBITMQ_DEFAULT_USER=zkj'
-      - 'RABBITMQ_DEFAULT_PASS=123456'
+      - 'RABBITMQ_DEFAULT_USER=guest'
+      - 'RABBITMQ_DEFAULT_PASS=guest'
       - 'RABBITMQ_DEFAULT_VHOST=/'
     ports:
       - '5672:5672'
