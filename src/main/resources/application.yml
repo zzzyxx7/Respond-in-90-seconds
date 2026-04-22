@@ -89,8 +89,11 @@ ai:
     # 若 AI 返回包含成本字段，优先使用 AI 原始值；
     # 若未返回，则用下面单价按 token 估算（每 1k token）
     currency: USD
-    default-input-per-1k: 0
-    default-output-per-1k: 0
+    # 兜底估算：按 DeepSeek 官方 deepseek-chat 公布的 1M tokens 单价折算
+    # 输入（cache miss）$0.27 / 1M => $0.00027 / 1k
+    # 输出 $1.10 / 1M => $0.00110 / 1k
+    default-input-per-1k: 0.00027
+    default-output-per-1k: 0.00110
 
 management:
   endpoints:
@@ -149,5 +152,4 @@ doc:
     port: 5672
     username: guest
     password: guest
-
 

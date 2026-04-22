@@ -221,12 +221,30 @@
           AND status = 'RUNNING'
     </update>
 
+    <sql id="resolvedAiCostExpr">
+        COALESCE(
+            ai_cost,
+            CASE
+                WHEN (
+                    (input_tokens IS NOT NULL AND input_tokens &gt; 0 AND #{defaultInputPer1k} IS NOT NULL AND #{defaultInputPer1k} &gt; 0)
+                    OR
+                    (output_tokens IS NOT NULL AND output_tokens &gt; 0 AND #{defaultOutputPer1k} IS NOT NULL AND #{defaultOutputPer1k} &gt; 0)
+                )
+                THEN (
+                    COALESCE(input_tokens, 0) * #{defaultInputPer1k} / 1000
+                    + COALESCE(output_tokens, 0) * #{defaultOutputPer1k} / 1000
+                )
+                ELSE NULL
+            END
+        )
+    </sql>
+
     <select id="sumTokenStatsByConditions" resultType="com.fusion.docfusion.dto.FillTaskTokenStatsVO">
         SELECT COUNT(*)                                                AS task_count,
                COALESCE(SUM(input_tokens), 0)                         AS total_input_tokens,
                COALESCE(SUM(output_tokens), 0)                        AS total_output_tokens,
                COALESCE(SUM(total_tokens), 0)                         AS total_tokens,
-               COALESCE(SUM(ai_cost), 0)                              AS total_cost
+               COALESCE(SUM(<include refid="resolvedAiCostExpr"/>), 0) AS total_cost
         FROM fill_task
         <where>
             <if test="userId != null">
@@ -247,7 +265,7 @@
                COALESCE(SUM(input_tokens), 0)                         AS input_tokens,
                COALESCE(SUM(output_tokens), 0)                        AS output_tokens,
                COALESCE(SUM(total_tokens), 0)                         AS total_tokens,
-               COALESCE(SUM(ai_cost), 0)                              AS total_cost,
+               COALESCE(SUM(<include refid="resolvedAiCostExpr"/>), 0) AS total_cost,
                COALESCE(MAX(NULLIF(ai_cost_currency, '')), 'USD')     AS total_cost_currency
         FROM fill_task
         <where>
@@ -271,7 +289,7 @@
                COALESCE(SUM(input_tokens), 0)                         AS input_tokens,
                COALESCE(SUM(output_tokens), 0)                        AS output_tokens,
                COALESCE(SUM(total_tokens), 0)                         AS total_tokens,
-               COALESCE(SUM(ai_cost), 0)                              AS total_cost,
+               COALESCE(SUM(<include refid="resolvedAiCostExpr"/>), 0) AS total_cost,
                COALESCE(MAX(NULLIF(ai_cost_currency, '')), 'USD')     AS total_cost_currency
         FROM fill_task
         <where>
@@ -295,7 +313,7 @@
                COALESCE(SUM(input_tokens), 0)                         AS input_tokens,
                COALESCE(SUM(output_tokens), 0)                        AS output_tokens,
                COALESCE(SUM(total_tokens), 0)                         AS total_tokens,
-               COALESCE(SUM(ai_cost), 0)                              AS total_cost,
+               COALESCE(SUM(<include refid="resolvedAiCostExpr"/>), 0) AS total_cost,
                COALESCE(MAX(NULLIF(ai_cost_currency, '')), 'USD')     AS total_cost_currency
         FROM fill_task
         <where>
@@ -316,7 +334,7 @@
     <select id="sumTokenStatsByCurrency" resultType="com.fusion.docfusion.dto.FillTaskTokenStatsVO$CurrencyBreakdownItem">
         SELECT COALESCE(NULLIF(ai_cost_currency, ''), 'USD')          AS currency,
                COUNT(*)                                               AS task_count,
-               COALESCE(SUM(ai_cost), 0)                              AS total_cost
+               COALESCE(SUM(<include refid="resolvedAiCostExpr"/>), 0) AS total_cost
         FROM fill_task
         <where>
             <if test="userId != null">

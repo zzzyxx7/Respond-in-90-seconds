@@ -160,6 +160,7 @@ public class AiFillServiceImpl implements AiFillService {
         DownloadedResult downloaded = downloadRemoteResult(taskId, template.getFileName(),
                 new String[]{"excel", "result_xlsx", "docx", "result_docx"});
         task.setResultFilePath(downloaded.localFileName);
+        mirrorAdditionalRemoteResults(taskId, downloaded.kind);
         applyUsageSummary(task, taskId, usageSummary);
         log.info("AI 填表完成并落盘, localFile={}, remoteKind={}", downloaded.localFileName, downloaded.kind);
     }
@@ -195,6 +196,7 @@ public class AiFillServiceImpl implements AiFillService {
         DownloadedResult downloaded = downloadRemoteResult(taskId, "free_mode.xlsx",
                 new String[]{"excel", "result_xlsx", "docx", "result_docx", "json", "result_json"});
         task.setResultFilePath(downloaded.localFileName);
+        mirrorAdditionalRemoteResults(taskId, downloaded.kind);
         applyUsageSummary(task, taskId, usageSummary);
         log.info("AI 自由模式完成并落盘, localFile={}, remoteKind={}", downloaded.localFileName, downloaded.kind);
     }
@@ -1094,6 +1096,107 @@ public class AiFillServiceImpl implements AiFillService {
             Thread.currentThread().interrupt();
             throw new BusinessException(ErrorCode.AI_POLL_INTERRUPTED);
         }
+    }
+
+    private void mirrorAdditionalRemoteResults(String remoteTaskId, String primaryKind) {
+        try {
+            JsonNode outputFiles = fetchRemoteOutputFiles(remoteTaskId);
+            if (outputFiles == null || !outputFiles.isObject()) {
+                return;
+            }
+            Set<String> copiedSourcePaths = new LinkedHashSet<>();
+            String primaryPath = primaryKind == null ? null : textOrNull(outputFiles.get(primaryKind));
+            if (primaryPath != null) {
+                copiedSourcePaths.add(normalizeRemoteSourcePath(primaryPath));
+            }
+            JsonNode byInput = outputFiles.path("by_input");
+            if (!byInput.isObject()) {
+                return;
+            }
+            Iterator<Map.Entry<String, JsonNode>> it = byInput.fields();
+            while (it.hasNext()) {
+                JsonNode group = it.next().getValue();
+                if (!group.isObject()) {
+                    continue;
+                }
+                for (String key : REMOTE_OUTPUT_FILE_KEYS) {
+                    String remotePath = textOrNull(group.get(key));
+                    if (remotePath == null) {
+                        continue;
+                    }
+                    String normalized = normalizeRemoteSourcePath(remotePath);
+                    if (!copiedSourcePaths.add(normalized)) {
+                        continue;
+                    }
+                    mirrorRemoteResultFile(remoteTaskId, remotePath);
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("鏄犲皠 AI 澶氱粨鏋滃埌鏈湴澶辫触, remoteTaskId={}", remoteTaskId, e);
+        }
+    }
+
+    private JsonNode fetchRemoteOutputFiles(String remoteTaskId) throws Exception {
+        if (remoteTaskId == null || remoteTaskId.isBlank()) {
+            return null;
+        }
+        String statusUrl = aiBaseUrl + String.format(statusPathFormat, remoteTaskId);
+        ResponseEntity<String> response = executeWithRetry(
+                "mirrorAdditionalRemoteResults/status",
+                () -> restTemplate.getForEntity(statusUrl, String.class)
+        );
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null || response.getBody().isBlank()) {
+            return null;
+        }
+        JsonNode root = objectMapper.readTree(response.getBody());
+        JsonNode outputFiles = root.path("output_files");
+        return outputFiles.isObject() ? outputFiles : null;
+    }
+
+    private void mirrorRemoteResultFile(String remoteTaskId, String remotePath) throws Exception {
+        Path source = resolveRemoteResultSourcePath(remotePath);
+        if (source == null || !Files.exists(source) || !Files.isRegularFile(source)) {
+            return;
+        }
+        Path resultsDir = Paths.get(uploadProperties.getResultsDir()).normalize();
+        Files.createDirectories(resultsDir);
+        String sourceName = source.getFileName().toString();
+        String localFileName = "fill_" + remoteTaskId + "_" + UUID.randomUUID().toString().substring(0, 8)
+                + "_" + sourceName;
+        Path out = resultsDir.resolve(localFileName).normalize();
+        if (!out.startsWith(resultsDir)) {
+            throw new BusinessException(ErrorCode.AI_DOWNLOAD_PATH_INVALID);
+        }
+        Files.copy(source, out, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private Path resolveRemoteResultSourcePath(String remotePath) {
+        if (remotePath == null || remotePath.isBlank()) {
+            return null;
+        }
+        Path path = Paths.get(remotePath);
+        if (path.isAbsolute()) {
+            return path.normalize();
+        }
+        Path cwd = Paths.get("").toAbsolutePath().normalize();
+        Path candidate = cwd.resolve(path).normalize();
+        if (Files.exists(candidate)) {
+            return candidate;
+        }
+        Path aiWorkspace = cwd.resolve("Respond in 90 seconds_A23").resolve(path).normalize();
+        if (Files.exists(aiWorkspace)) {
+            return aiWorkspace;
+        }
+        return candidate;
+    }
+
+    private static String textOrNull(JsonNode node) {
+        return nonBlankTextNode(node) ? node.asText() : null;
+    }
+
+    private static String normalizeRemoteSourcePath(String remotePath) {
+        return remotePath == null ? "" : remotePath.replace('/', '\\').trim().toLowerCase(Locale.ROOT);
     }
 
     private record DownloadedResult(String localFileName, String kind) {

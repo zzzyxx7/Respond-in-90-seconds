@@ -20,6 +20,7 @@ public class FillTaskVO {
     private String userRequirement;
     private String status;
     private String resultFilePath;
+    private List<String> resultFilePaths;
     /** 结果文件类型（excel/docx/json/unknown） */
     private String resultFileType;
     private LocalDateTime createdAt;

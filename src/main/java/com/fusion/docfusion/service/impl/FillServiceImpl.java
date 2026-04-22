@@ -1,6 +1,7 @@
 package com.fusion.docfusion.service.impl;
 
 import com.fusion.docfusion.common.Result;
+import com.fusion.docfusion.config.UploadProperties;
 import com.fusion.docfusion.config.RabbitConfig;
 import com.fusion.docfusion.dto.FillRequest;
 import com.fusion.docfusion.dto.FillTaskListPageVO;
@@ -32,19 +33,25 @@ import com.fusion.docfusion.util.RequestUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import com.fusion.docfusion.sse.FillTaskSseBroker;
 import com.fusion.docfusion.sse.FillTaskStatusEvent;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * 填表任务：创建任务后执行填表逻辑。
@@ -64,10 +71,17 @@ public class FillServiceImpl implements FillService {
     private final RedisRateLimiter rateLimiter;
     private final FillTaskCancelService cancelService;
     private final FillTaskSseBroker sseBroker;
+    private final UploadProperties uploadProperties;
 
     // 比赛/演示用：避免刷任务导致队列膨胀
     private static final int MAX_SUBMISSIONS_PER_MINUTE = 100;
     private static final long RATE_LIMIT_WINDOW_MILLIS = Duration.ofMinutes(1).toMillis();
+
+    @Value("${ai.cost.default-input-per-1k:0}")
+    private BigDecimal defaultInputPer1k;
+
+    @Value("${ai.cost.default-output-per-1k:0}")
+    private BigDecimal defaultOutputPer1k;
 
     @Override
     public Result<FillTaskVO> submitFill(FillRequest request) {
@@ -245,7 +259,8 @@ public class FillServiceImpl implements FillService {
         if (currentUserId == null) {
             throw new BusinessException(ErrorCode.AUTH_LOGIN_REQUIRED, "请先登录查看 token 成本统计");
         }
-        FillTaskTokenStatsVO stats = fillTaskMapper.sumTokenStatsByConditions(currentUserId, mode, status);
+        FillTaskTokenStatsVO stats = fillTaskMapper.sumTokenStatsByConditions(
+                currentUserId, mode, status, defaultInputPer1k, defaultOutputPer1k);
         if (stats == null) {
             stats = new FillTaskTokenStatsVO();
             stats.setTaskCount(0L);
@@ -257,10 +272,14 @@ public class FillServiceImpl implements FillService {
         stats.setTotalCostCurrency("USD");
         Long missingUsageTaskCount = fillTaskMapper.countMissingUsageTasksByConditions(currentUserId, mode, status);
         stats.setMissingUsageTaskCount(missingUsageTaskCount == null ? 0L : missingUsageTaskCount);
-        stats.setProviderBreakdowns(fillTaskMapper.sumTokenStatsByProvider(currentUserId, mode, status));
-        stats.setModeBreakdowns(fillTaskMapper.sumTokenStatsByMode(currentUserId, mode, status));
-        stats.setStatusBreakdowns(fillTaskMapper.sumTokenStatsByStatus(currentUserId, mode, status));
-        stats.setCurrencyBreakdowns(fillTaskMapper.sumTokenStatsByCurrency(currentUserId, mode, status));
+        stats.setProviderBreakdowns(fillTaskMapper.sumTokenStatsByProvider(
+                currentUserId, mode, status, defaultInputPer1k, defaultOutputPer1k));
+        stats.setModeBreakdowns(fillTaskMapper.sumTokenStatsByMode(
+                currentUserId, mode, status, defaultInputPer1k, defaultOutputPer1k));
+        stats.setStatusBreakdowns(fillTaskMapper.sumTokenStatsByStatus(
+                currentUserId, mode, status, defaultInputPer1k, defaultOutputPer1k));
+        stats.setCurrencyBreakdowns(fillTaskMapper.sumTokenStatsByCurrency(
+                currentUserId, mode, status, defaultInputPer1k, defaultOutputPer1k));
         return Result.success(stats);
     }
 
@@ -337,6 +356,7 @@ public class FillServiceImpl implements FillService {
         vo.setUserRequirement(task.getUserRequirement());
         vo.setStatus(task.getStatus());
         vo.setResultFilePath(task.getResultFilePath());
+        vo.setResultFilePaths(collectResultFilePaths(task));
         vo.setResultFileType(detectResultFileType(task.getResultFilePath()));
         vo.setCreatedAt(task.getCreatedAt());
         vo.setFinishedAt(task.getFinishedAt());
@@ -494,6 +514,39 @@ public class FillServiceImpl implements FillService {
             return "json";
         }
         return "unknown";
+    }
+
+    private List<String> collectResultFilePaths(FillTask task) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        if (task == null) {
+            return List.of();
+        }
+        if (task.getResultFilePath() != null && !task.getResultFilePath().isBlank()) {
+            result.add(task.getResultFilePath());
+        }
+        String remoteTaskId = task.getAiRemoteTaskId();
+        if (remoteTaskId == null || remoteTaskId.isBlank()) {
+            return List.copyOf(result);
+        }
+        try {
+            Path resultsDir = Paths.get(uploadProperties.getResultsDir()).normalize();
+            if (!Files.isDirectory(resultsDir)) {
+                return List.copyOf(result);
+            }
+            String prefix = "fill_" + remoteTaskId + "_";
+            List<String> matched = Files.list(resultsDir)
+                    .filter(Files::isRegularFile)
+                    .map(resultsDir::relativize)
+                    .map(Path::toString)
+                    .filter(name -> name.startsWith(prefix))
+                    .sorted(Comparator.naturalOrder())
+                    .toList();
+            result.addAll(matched);
+        } catch (Exception e) {
+            log.warn("收集任务结果文件列表失败, taskPublicId={}, remoteTaskId={}",
+                    task.getPublicId(), remoteTaskId, e);
+        }
+        return List.copyOf(result);
     }
 
     private static String generatePublicId() {

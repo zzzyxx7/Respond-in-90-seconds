@@ -33,6 +33,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
 
 /**
  * 填表任务：提交填表、查询任务、下载结果文件
@@ -167,7 +168,9 @@ public class FillController {
      * GET /api/fill/download/public/{taskPublicId}
      */
     @GetMapping("/download/public/{taskPublicId}")
-    public void downloadResultByPublicId(@PathVariable String taskPublicId, HttpServletResponse response) {
+    public void downloadResultByPublicId(@PathVariable String taskPublicId,
+                                         @RequestParam(value = "file", required = false) String requestedFile,
+                                         HttpServletResponse response) {
         log.info("下载填表结果(公共ID), taskPublicId={}", taskPublicId);
         FillTaskVO task = fillService.getTaskByPublicId(taskPublicId).getData();
         if (task == null || !TaskStatus.SUCCESS.name().equals(task.getStatus()) || task.getResultFilePath() == null) {
@@ -178,7 +181,8 @@ public class FillController {
         }
         Path resultsDir = Paths.get(uploadProperties.getResultsDir());
         Path normalizedResultsDir = resultsDir.normalize();
-        Path filePath = resultsDir.resolve(task.getResultFilePath()).normalize();
+        String resolvedResultFile = resolveRequestedResultFile(task, requestedFile);
+        Path filePath = resultsDir.resolve(resolvedResultFile).normalize();
         if (!filePath.startsWith(normalizedResultsDir)) {
             log.warn("下载失败：结果文件落点不在结果目录内, taskPublicId={}, path={}",
                     taskPublicId, filePath);
@@ -192,7 +196,7 @@ public class FillController {
                 response.setStatus(404);
                 return;
             }
-            String resultFilePath = task.getResultFilePath();
+            String resultFilePath = resolvedResultFile;
             String filename = resultFilePath;
             int lastSlash = filename.lastIndexOf('/');
             int lastBackslash = filename.lastIndexOf('\\');
@@ -223,6 +227,31 @@ public class FillController {
             log.error("下载失败：异常, taskPublicId={}", taskPublicId, e);
             response.setStatus(404);
         }
+    }
+
+    private String resolveRequestedResultFile(FillTaskVO task, String requestedFile) {
+        String fallback = task.getResultFilePath();
+        if (requestedFile == null || requestedFile.isBlank()) {
+            return fallback;
+        }
+        List<String> candidates = task.getResultFilePaths();
+        if (candidates == null || candidates.isEmpty()) {
+            return fallback;
+        }
+        String trimmed = requestedFile.trim();
+        for (String candidate : candidates) {
+            if (candidate == null || candidate.isBlank()) {
+                continue;
+            }
+            if (candidate.equals(trimmed)) {
+                return candidate;
+            }
+            String candidateName = Paths.get(candidate).getFileName().toString();
+            if (candidateName.equals(trimmed)) {
+                return candidate;
+            }
+        }
+        return fallback;
     }
 
     private static String resolveContentTypeByFilename(String filename) {

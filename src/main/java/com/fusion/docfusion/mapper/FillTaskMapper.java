@@ -4,6 +4,7 @@ import com.fusion.docfusion.entity.FillTask;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -77,24 +78,34 @@ public interface FillTaskMapper {
      * 当前用户任务 token / 成本汇总（可按 mode/status 条件过滤）。
      */
     com.fusion.docfusion.dto.FillTaskTokenStatsVO sumTokenStatsByConditions(@Param("userId") Long userId,
-                                                                             @Param("mode") String mode,
-                                                                             @Param("status") String status);
+                                                                            @Param("mode") String mode,
+                                                                            @Param("status") String status,
+                                                                            @Param("defaultInputPer1k") BigDecimal defaultInputPer1k,
+                                                                            @Param("defaultOutputPer1k") BigDecimal defaultOutputPer1k);
 
     List<com.fusion.docfusion.dto.FillTaskTokenStatsVO.BreakdownItem> sumTokenStatsByProvider(@Param("userId") Long userId,
-                                                                                               @Param("mode") String mode,
-                                                                                               @Param("status") String status);
+                                                                                              @Param("mode") String mode,
+                                                                                              @Param("status") String status,
+                                                                                              @Param("defaultInputPer1k") BigDecimal defaultInputPer1k,
+                                                                                              @Param("defaultOutputPer1k") BigDecimal defaultOutputPer1k);
 
     List<com.fusion.docfusion.dto.FillTaskTokenStatsVO.BreakdownItem> sumTokenStatsByMode(@Param("userId") Long userId,
-                                                                                           @Param("mode") String mode,
-                                                                                           @Param("status") String status);
+                                                                                          @Param("mode") String mode,
+                                                                                          @Param("status") String status,
+                                                                                          @Param("defaultInputPer1k") BigDecimal defaultInputPer1k,
+                                                                                          @Param("defaultOutputPer1k") BigDecimal defaultOutputPer1k);
 
     List<com.fusion.docfusion.dto.FillTaskTokenStatsVO.BreakdownItem> sumTokenStatsByStatus(@Param("userId") Long userId,
-                                                                                             @Param("mode") String mode,
-                                                                                             @Param("status") String status);
+                                                                                            @Param("mode") String mode,
+                                                                                            @Param("status") String status,
+                                                                                            @Param("defaultInputPer1k") BigDecimal defaultInputPer1k,
+                                                                                            @Param("defaultOutputPer1k") BigDecimal defaultOutputPer1k);
 
     List<com.fusion.docfusion.dto.FillTaskTokenStatsVO.CurrencyBreakdownItem> sumTokenStatsByCurrency(@Param("userId") Long userId,
-                                                                                                       @Param("mode") String mode,
-                                                                                                       @Param("status") String status);
+                                                                                                      @Param("mode") String mode,
+                                                                                                      @Param("status") String status,
+                                                                                                      @Param("defaultInputPer1k") BigDecimal defaultInputPer1k,
+                                                                                                      @Param("defaultOutputPer1k") BigDecimal defaultOutputPer1k);
 
     Long countMissingUsageTasksByConditions(@Param("userId") Long userId,
                                             @Param("mode") String mode,
