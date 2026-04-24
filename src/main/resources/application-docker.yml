@@ -1,8 +1,39 @@
-# 与 docker-compose.dev.yml 中 RabbitMQ 默认账号一致（dev 已默认 guest，本 profile 可选）。
-# 使用方式：spring.profiles.active=dev,docker（在 dev 之后加载，可再次固定 doc.rabbitmq）
-doc:
+server:
+  port: 8081
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${doc.datasource.host:mysql}:${doc.datasource.port:3306}/${doc.datasource.database:mydatabase}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${doc.datasource.username:root}
+    password: ${doc.datasource.password:1234}
+  data:
+    redis:
+      host: ${doc.redis.host:redis}
+      port: ${doc.redis.port:6379}
   rabbitmq:
-    host: localhost
+    host: ${doc.rabbitmq.host:rabbitmq}
+    port: ${doc.rabbitmq.port:5672}
+    username: ${doc.rabbitmq.username:guest}
+    password: ${doc.rabbitmq.password:guest}
+
+doc:
+  datasource:
+    host: mysql
+    port: 3306
+    database: mydatabase
+    username: root
+    password: 1234
+  redis:
+    host: redis
+    port: 6379
+  rabbitmq:
+    host: rabbitmq
     port: 5672
     username: guest
     password: guest
+
+ai:
+  base-url: ${AI_BASE_URL:http://a23:8000}
+  mock:
+    enabled: false

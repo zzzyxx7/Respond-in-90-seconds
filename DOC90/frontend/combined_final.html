@@ -4854,8 +4854,10 @@
     let documentSetId = null;
     let activeProcessTaskId = null;
     let isActiveTaskPaused = false;
-    // 后端接口地址
-    const baseUrl = 'http://127.0.0.1:8081';
+    // 后端接口地址：本地联调用 127.0.0.1，部署到腾讯云后默认走公网 IP
+    const baseUrl = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')
+      ? 'http://127.0.0.1:8081'
+      : 'http://49.235.168.172';
 
     function updateTaskActionButtons() {
       const stopButtons = [mainStopBtn, processStopBtn];

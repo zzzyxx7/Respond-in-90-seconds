@@ -1,0 +1,117 @@
+services:
+  mysql:
+    image: mysql:8.3
+    container_name: doc-fusion-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+      MYSQL_DATABASE: "mydatabase"
+      TZ: "Asia/Shanghai"
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--default-time-zone=+08:00"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/mydatabase_dump.sql:/docker-entrypoint-initdb.d/01_mydatabase_dump.sql:ro
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: doc-fusion-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: doc-fusion-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: "guest"
+      RABBITMQ_DEFAULT_PASS: "guest"
+    ports:
+      - "15672:15672"
+
+  a23:
+    build:
+      context: ./Respond in 90 seconds_A23
+      dockerfile: Dockerfile
+    container_name: doc-fusion-a23
+    restart: unless-stopped
+    environment:
+      A23_MODEL_TYPE: ${A23_MODEL_TYPE:-deepseek}
+      A23_DEEPSEEK_BASE_URL: ${A23_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      A23_DEEPSEEK_API_KEY: ${A23_DEEPSEEK_API_KEY:-}
+      A23_DEEPSEEK_MODEL: ${A23_DEEPSEEK_MODEL:-deepseek-chat}
+      A23_OPENAI_BASE_URL: ${A23_OPENAI_BASE_URL:-https://api.openai.com/v1}
+      A23_OPENAI_API_KEY: ${A23_OPENAI_API_KEY:-}
+      A23_OPENAI_MODEL: ${A23_OPENAI_MODEL:-gpt-4o-mini}
+      A23_QWEN_BASE_URL: ${A23_QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      A23_QWEN_API_KEY: ${A23_QWEN_API_KEY:-}
+      A23_QWEN_MODEL: ${A23_QWEN_MODEL:-qwen-plus}
+      A23_ENABLE_OCR: ${A23_ENABLE_OCR:-false}
+      A23_ENABLE_TASKS: ${A23_ENABLE_TASKS:-true}
+      A23_PERSIST_UPLOADS: ${A23_PERSIST_UPLOADS:-true}
+      A23_PERSIST_PROFILES: ${A23_PERSIST_PROFILES:-false}
+      A23_TASK_RETENTION_HOURS: ${A23_TASK_RETENTION_HOURS:-24}
+      A23_UPLOAD_RETENTION_HOURS: ${A23_UPLOAD_RETENTION_HOURS:-24}
+      A23_TEMP_RETENTION_HOURS: ${A23_TEMP_RETENTION_HOURS:-1}
+      A23_MYSQL_HOST: mysql
+      A23_MYSQL_PORT: 3306
+      A23_MYSQL_USER: root
+      A23_MYSQL_PASSWORD: 1234
+      A23_MYSQL_DATABASE: mydatabase
+    depends_on:
+      - mysql
+    volumes:
+      - a23_storage:/app/storage
+    ports:
+      - "8000:8000"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: doc-fusion-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: dev,docker
+      DOC_DATASOURCE_HOST: mysql
+      DOC_DATASOURCE_PORT: 3306
+      DOC_DATASOURCE_DATABASE: mydatabase
+      DOC_DATASOURCE_USERNAME: root
+      DOC_DATASOURCE_PASSWORD: 1234
+      DOC_REDIS_HOST: redis
+      DOC_REDIS_PORT: 6379
+      DOC_RABBITMQ_HOST: rabbitmq
+      DOC_RABBITMQ_PORT: 5672
+      DOC_RABBITMQ_USERNAME: guest
+      DOC_RABBITMQ_PASSWORD: guest
+      AI_BASE_URL: http://a23:8000
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+      - a23
+    volumes:
+      - backend_uploads:/app/uploads
+    ports:
+      - "8081:8081"
+
+  frontend:
+    build:
+      context: ./DOC90/frontend
+      dockerfile: Dockerfile
+    container_name: doc-fusion-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  mysql_data:
+  redis_data:
+  backend_uploads:
+  a23_storage:

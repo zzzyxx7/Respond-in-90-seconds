@@ -1,0 +1,24 @@
+.git
+.idea
+.m2-repo
+target
+out
+uploads
+tmp_*
+Excel
+word
+md
+测试集
+Respond in 90 seconds_A23
+DOC90/.idea
+DOC90/.vscode
+DOC90/frontend/.idea
+DOC90/frontend/.tmp_*
+DOC90/frontend/__tmp_*.js
+DOC90/frontend/__broken_check.js
+DOC90/frontend/combined_final.before_quote_fix*.html
+DOC90/frontend/combined_final.broken_*.html
+DOC90/backend/node_modules
+DOC90/backend/uploads
+*.log
+*.zip
