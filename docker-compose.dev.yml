@@ -1,0 +1,45 @@
+services:
+  mysql:
+    image: mysql:8.3
+    container_name: doc-fusion-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+      MYSQL_DATABASE: "mydatabase"
+      TZ: "Asia/Shanghai"
+    ports:
+      - "3306:3306"
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--default-time-zone=+08:00"
+    volumes:
+      - doc_fusion_mysql_data:/var/lib/mysql
+      # 首次启动（数据卷为空）时自动导入本地 dump
+      - ./db/mydatabase_dump.sql:/docker-entrypoint-initdb.d/01_mydatabase_dump.sql:ro
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: doc-fusion-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - doc_fusion_redis_data:/data
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: doc-fusion-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: "guest"
+      RABBITMQ_DEFAULT_PASS: "guest"
+
+volumes:
+  doc_fusion_mysql_data:
+  doc_fusion_redis_data:
+

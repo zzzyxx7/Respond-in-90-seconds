@@ -3,6 +3,12 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+out/
+*.class
+*.jar
+*.war
+*.log
+*.pid
 
 ### STS ###
 .apt_generated
@@ -34,3 +40,56 @@ build/
 
 # local config (do not commit)
 application-dev.yml
+
+# local caches / package managers
+.m2-repo/
+
+# runtime uploads / generated outputs
+uploads/
+tmp_*/
+tmp_*
+-Context
+
+# local archives / backups
+Respond in 90 seconds_A23.zip
+Respond in 90 seconds_A23(1).zip
+*.zip
+
+# Python runtime
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+
+# AI service local state
+Respond in 90 seconds_A23/.venv/
+Respond in 90 seconds_A23/venv/
+Respond in 90 seconds_A23/__pycache__/
+Respond in 90 seconds_A23/.pytest_cache/
+Respond in 90 seconds_A23/logs/
+Respond in 90 seconds_A23/storage/
+Respond in 90 seconds_A23/tmp_*/
+Respond in 90 seconds_A23/api_server.log
+Respond in 90 seconds_A23/uv_err.txt
+Respond in 90 seconds_A23/.env
+
+# Node / frontend local state
+DOC90/backend/node_modules/
+DOC90/backend/uploads/
+DOC90/frontend/.idea/
+DOC90/frontend/.tmp_*.js
+DOC90/frontend/__tmp_*.js
+DOC90/frontend/__broken_check.js
+DOC90/frontend/combined_final.before_quote_fix*.html
+DOC90/frontend/combined_final.broken_*.html
+DOC90/.idea/
+DOC90/.vscode/
+
+# sample / local test data
+Excel/
+word/
+md/
+测试集/

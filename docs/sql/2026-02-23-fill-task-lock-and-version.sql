@@ -1,0 +1,8 @@
+-- fill_task 乐观锁字段
+ALTER TABLE fill_task
+    ADD COLUMN version BIGINT NOT NULL DEFAULT 0 COMMENT '乐观锁版本号，每次更新+1';
+
+-- 可选：补充状态说明（不同 MySQL 版本可跳过该语句）
+ALTER TABLE fill_task
+    MODIFY COLUMN status VARCHAR(32) NOT NULL DEFAULT 'PENDING'
+    COMMENT '任务状态：PENDING/RUNNING/SUCCESS/FAILED/TIMEOUT/CANCELLED';
