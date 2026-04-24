@@ -1,0 +1,58 @@
+# 核心依赖（版本锁定）
+fastapi==0.115.0
+uvicorn==0.30.0
+# 与 docling 约束对齐：openpyxl>=3.1.5、python-docx>=1.1.2、requests>=2.32.3
+openpyxl>=3.1.5,<4.0.0
+python-docx>=1.1.2,<2.0.0
+requests>=2.32.3,<3.0.0
+rapidfuzz==3.9.0
+openai==2.31.0  # 与 langextract[openai] 兼容，支持 OpenAI 兼容 API（DeepSeek/Qwen）
+python-multipart==0.0.9
+python-dotenv==1.0.0
+bcrypt==4.0.1
+passlib[bcrypt]==1.7.4
+
+# 文本处理（docling-ibm-models 要求 numpy>=1.24.4）
+numpy>=1.24.4,<2.0.0
+jieba==0.42.1
+
+# 图片处理与OCR
+Pillow==10.0.0
+# PyPI 上无 4.8.0 短标签，需用完整构建号（如 4.8.0.76）
+opencv-python==4.8.0.76
+pytesseract==0.3.10
+pdf2image==1.16.3
+
+# 云OCR SDK（可选，用于混合方案）
+# baidu-aip==4.16.6  # 百度OCR
+# tencentcloud-sdk-python==3.0.0  # 腾讯云OCR
+
+# 系统依赖说明：
+# 1. Tesseract OCR引擎：需要单独安装并添加到PATH
+#    Windows: 下载安装包 https://github.com/UB-Mannheim/tesseract/wiki
+#    Linux: sudo apt-get install tesseract-ocr tesseract-ocr-chi-sim
+#    macOS: brew install tesseract
+# 2. Poppler工具：用于PDF转图片
+#    Windows: 下载安装包 https://github.com/oschwartz10612/poppler-windows/releases
+#    Linux: sudo apt-get install poppler-utils
+#    macOS: brew install poppler
+
+# 新增依赖：Docling + LangExtract 重构
+# 勿使用裸 docling>=2.0.0：pip 会长时间回溯解析；与团队当前代码对齐可再收紧/升级此上界
+docling>=2.0.0,<2.26.0
+langextract[openai]>=0.1.0  # 包含 OpenAI 兼容 API 支持，用于 DeepSeek/OpenAI/Qwen
+diskcache>=5.6.3
+prometheus-client>=0.20.0
+
+# 语义相似度计算（可选）
+sentence-transformers>=2.2.0
+
+# 数据库（MySQL 入库）
+pymysql>=1.1.0
+
+# LangChain RAG 集成（可选，需要单独安装）
+# 安装命令：pip install langchain langchain-community chromadb
+# 安装后，qna_service.py 将自动切换到 LangChain ConversationalRetrievalChain
+# langchain>=0.2.0
+# langchain-community>=0.2.0
+# chromadb>=0.5.0
